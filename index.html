@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart School Management System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={theme:{extend:{colors:{royalBlue:'#2457D6',blueTint:'#F4F7FC',blueHover:'#1B45B3',blueBorder:'#D2E0FB',blueSoft:'#E8EFFD'},fontFamily:{poppins:['Poppins','sans-serif'],nunito:['Nunito','sans-serif']}}}}
+</script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+.hidden{display:none!important}
+html,body{max-width:100%;overflow-x:hidden}
+body{font-family:'Nunito',sans-serif;background:#F4F7FC;color:#1E293B}
+h1,h2,h3,h4,h5,h6,.font-heading{font-family:'Poppins',sans-serif}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:#F4F7FC}::-webkit-scrollbar-thumb{background:#2457D6;border-radius:3px}
+.lift{transition:transform .2s,box-shadow .2s}.lift:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(36,87,214,.12)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.view-anim{animation:fadeIn .3s ease}
+button,select,input{min-height:40px}
+</style>
+</head>
+<body class="bg-blueTint min-h-screen flex flex-col font-nunito antialiased">
+
+<div id="toast-container" class="fixed top-5 right-0 sm:right-5 z-[60] flex flex-col space-y-2 pointer-events-none px-4 sm:px-0 w-full sm:w-auto"></div>
+
+<!-- LOGIN -->
+<div id="auth-wrapper" class="flex-1 flex items-center justify-center p-4 my-8">
+ <div class="bg-white rounded-3xl shadow-xl border border-blueBorder w-full max-w-xl overflow-hidden">
+  <div class="bg-royalBlue text-white p-6 sm:p-8 text-center relative overflow-hidden">
+   <div class="absolute -right-12 -top-12 w-36 h-36 bg-white opacity-10 rounded-full pointer-events-none"></div>
+   <div class="inline-flex items-center justify-center w-16 h-16 bg-white text-royalBlue rounded-2xl mb-3 shadow-md"><i data-lucide="graduation-cap" class="w-8 h-8"></i></div>
+   <h1 class="text-2xl font-bold font-poppins">Smart School System</h1>
+   <p class="text-blue-100 text-sm mt-1">Classroom & Institutional Portal (Grades 1–12)</p>
+  </div>
+    <form id="login-form" class="p-6 sm:p-8 space-y-5">
+   <div><label class="block text-xs font-bold uppercase tracking-wider text-royalBlue mb-1.5">User Role</label>
+    <select id="login-role" class="w-full px-4 py-3 bg-blueTint border border-blueBorder rounded-xl text-royalBlue font-semibold text-sm"><option value="Admin">Administrator</option><option value="Teacher">Teacher</option><option value="Student">Student</option></select></div>
+   <div><label class="block text-xs font-bold uppercase tracking-wider text-royalBlue mb-1.5">User ID / Email</label>
+    <input type="text" id="login-identifier" required placeholder="Admin email, or your ID e.g. TCH-101" class="w-full px-4 py-3 bg-blueTint border border-blueBorder rounded-xl text-sm"></div>
+   <div><label class="block text-xs font-bold uppercase tracking-wider text-royalBlue mb-1.5">Password</label>
+    <input type="password" id="login-password" required placeholder="••••••••" class="w-full px-4 py-3 bg-blueTint border border-blueBorder rounded-xl text-sm"></div>
+   <button type="submit" id="login-btn" class="w-full py-3.5 bg-royalBlue hover:bg-blueHover text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm"><i data-lucide="log-in" class="w-5 h-5"></i><span>Login to Dashboard</span></button>
+   <div class="bg-blueSoft p-4 rounded-xl border border-blueBorder text-xs text-royalBlue text-center"><b>Secure login:</b> Use the ID and password given by your school administrator.</div>
+  </form>
+ </div>
+</div>
+
+<!-- APP -->
+<div id="app-wrapper" class="hidden flex-1 flex h-screen overflow-hidden relative">
+ <div id="sidebar-backdrop" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-20 lg:hidden hidden"></div>
+ <aside id="sidebar" class="w-64 max-w-[85vw] bg-white border-r border-blueBorder flex flex-col transition-transform duration-300 z-30 fixed lg:static inset-y-0 left-0 -translate-x-full lg:translate-x-0 shadow-lg lg:shadow-none">
+  <div class="h-20 flex items-center justify-between px-5 border-b border-blueBorder bg-blueTint flex-shrink-0">
+   <div class="flex items-center space-x-3">
+    <div class="w-10 h-10 bg-royalBlue text-white rounded-xl flex items-center justify-center shadow-md"><i data-lucide="graduation-cap" class="w-6 h-6"></i></div>
+    <h2 class="font-bold font-poppins text-royalBlue text-lg leading-tight">SmartSchool</h2>
+   </div>
+   <button onclick="toggleSidebar()" class="lg:hidden p-1.5 text-royalBlue hover:bg-blueSoft rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+  </div>
+  <nav id="sidebar-nav" class="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto"></nav>
+  <div class="p-4 border-t border-blueBorder bg-blueTint flex-shrink-0">
+   <button onclick="logout()" class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border border-blueBorder text-royalBlue hover:bg-royalBlue hover:text-white rounded-xl font-bold text-sm transition-all"><i data-lucide="log-out" class="w-4 h-4"></i><span>Logout</span></button>
+  </div>
+ </aside>
+
+ <div class="flex-1 flex flex-col min-w-0 overflow-hidden bg-blueTint">
+  <header class="h-16 sm:h-20 bg-white border-b border-blueBorder flex items-center justify-between px-4 sm:px-6 z-10 flex-shrink-0">
+   <div class="flex items-center gap-3 min-w-0">
+    <button onclick="toggleSidebar()" class="lg:hidden p-2.5 rounded-xl bg-blueTint text-royalBlue hover:bg-royalBlue hover:text-white transition-all flex-shrink-0" aria-label="Menu"><i data-lucide="menu" class="w-6 h-6"></i></button>
+    <h1 id="page-title" class="text-base sm:text-2xl font-bold font-poppins text-royalBlue truncate">Dashboard</h1>
+   </div>
+   <div class="flex items-center gap-3 flex-shrink-0">
+    <div class="hidden sm:flex flex-col text-right"><span id="user-display-name" class="font-bold text-sm text-royalBlue"></span><span id="user-display-role" class="text-xs text-slate-500"></span></div>
+    <div class="w-10 h-10 bg-royalBlue text-white rounded-xl flex items-center justify-center font-bold shadow-md"><span id="user-avatar-initial"></span></div>
+   </div>
+  </header>
+  <main id="main-area" class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+   <section id="view-dashboard" class="hidden space-y-6"></section>
+   <section id="view-announcements" class="hidden space-y-6"></section>
+   <section id="view-my-profile" class="hidden space-y-6"></section>
+   <section id="view-my-profile-student" class="hidden space-y-6"></section>
+   <section id="view-my-classes" class="hidden space-y-6"></section>
+   <section id="view-my-subjects" class="hidden space-y-6"></section>
+   <section id="view-students" class="hidden space-y-6"></section>
+   <section id="view-teachers" class="hidden space-y-6"></section>
+   <section id="view-attendance" class="hidden space-y-6"></section>
+   <section id="view-marks" class="hidden space-y-6"></section>
+   <section id="view-timetable" class="hidden space-y-6"></section>
+   <section id="view-accounts" class="hidden space-y-6"></section>
+   <section id="view-reports" class="hidden space-y-6"></section>
+  </main>
+ </div>
+</div>
+
+<div id="modal-backdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+ <div id="modal-box" class="bg-white rounded-3xl shadow-2xl border border-blueBorder w-full max-w-lg overflow-y-auto transition-all transform scale-95 opacity-0 max-h-[92vh]"></div>
+</div>
+
+<script>
+/* ================= DATA ================= */
+const SCHOOL_NAME=(typeof APP_SCHOOL_NAME!=="undefined"&&APP_SCHOOL_NAME)||"My School";
+const SECTIONS=["A","B"];
+const DAYS=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+const sb=(typeof SUPABASE_URL!=="undefined"&&SUPABASE_URL&&!SUPABASE_URL.includes("YOUR-PROJECT"))?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
+let appData={currentUser:null,settings:{schoolName:SCHOOL_NAME},students:[],teachers:[],accounts:[],announcements:[],attendance:{},teacherAttendance:{},assignments:[],marks:[],
+ gradeList:["Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6","Grade 7","Grade 8","Grade 9","Grade 10","Grade 11","Grade 12"],
+ subjectsCatalog:{
+  "Grade 1":["English","Urdu","Mathematics","General Knowledge"],
+  "Grade 2":["English","Urdu","Mathematics","General Science"],
+  "Grade 3":["English","Urdu","Mathematics","Science","Islamiyat"],
+  "Grade 4":["English","Urdu","Mathematics","Science","Social Studies"],
+  "Grade 5":["English","Urdu","Mathematics","General Science","Computer Studies"],
+  "Grade 6":["English","Urdu","Mathematics","General Science","History & Geography"],
+  "Grade 7":["English","Urdu","Mathematics","Science","Computer Studies","Islamiyat"],
+  "Grade 8":["English","Urdu","Mathematics","Physics/Chem Intro","Computer","History"],
+  "Grade 9":["English","Urdu","Mathematics","Physics","Chemistry","Biology/Computer","Islamiyat"],
+  "Grade 10":["English","Urdu","Mathematics","Physics","Chemistry","Biology/Computer","Pakistan Studies"],
+  "Grade 11":["English","Urdu","Mathematics","Physics (Grade 11)","Chemistry (Grade 11)","Computer Science"],
+  "Grade 12":["Physics (Grade 12)","Mathematics (Grade 12)","English (Grade 12)","Chemistry (Grade 12)","Pakistan Studies","Computer Science"]
+ }
+};
+
+/* ---------- DATABASE LAYER (Supabase) ----------
+   The screens keep using appData. saveData() compares appData with the last
+   copy from the server and sends only the changes. The database security
+   rules (RLS) decide what each role is really allowed to change. */
+const M={
+ students:{to:s=>({id:s.id,name:s.name,father_name:s.fatherName,cnic:s.cnic,grade:s.grade,section:s.section||"A",photo:s.photo||null}),from:r=>({id:r.id,name:r.name,fatherName:r.father_name||"",cnic:r.cnic||"",grade:r.grade,section:r.section||"A",photo:r.photo||""})},
+ teachers:{to:t=>({id:t.id,name:t.name,father_name:t.fatherName||"",cnic:t.cnic||"",assigned_subjects:t.assignedSubjects||[],class_teacher_of:t.classTeacherOf||""}),from:r=>({id:r.id,name:r.name,fatherName:r.father_name||"",cnic:r.cnic||"",assignedSubjects:r.assigned_subjects||[],classTeacherOf:r.class_teacher_of||""})},
+ accounts:{to:a=>({id:a.id,record_id:a.recordId,name:a.name,role:a.role,email:a.email,status:a.status||"Active"}),from:r=>({id:r.id,recordId:r.record_id,name:r.name,role:r.role,email:r.email,status:r.status})},
+ announcements:{to:a=>({id:a.id,title:a.title,date:a.date,content:a.content}),from:r=>({id:r.id,title:r.title,date:r.date,content:r.content})},
+ assignments:{to:a=>({id:a.id,grade:a.grade,section:a.section,subject:a.subject,teacher_id:a.teacherId,day:a.day,start_time:a.start,end_time:a.end}),from:r=>({id:r.id,grade:r.grade,section:r.section,subject:r.subject,teacherId:r.teacher_id,day:r.day,start:r.start_time,end:r.end_time})},
+ marks:{to:m=>({id:m.id,student_id:m.studentId,subject:m.subject,exam_title:m.examTitle,obtained:m.obtained,total:m.total}),from:r=>({id:r.id,studentId:r.student_id,subject:r.subject,examTitle:r.exam_title,obtained:Number(r.obtained),total:Number(r.total)})}
+};
+const attRows=(o,col)=>{const out=[];for(const d in o)for(const id in o[d])out.push({date:d,[col]:id,status:o[d][id]});return out};
+const attNest=(rows,col)=>{const o={};rows.forEach(r=>{(o[r.date]=o[r.date]||{})[r[col]]=r.status});return o};
+// w = roles allowed to write this table (the database enforces it too)
+const SYNC=[
+ {n:"students",t:"students",pk:["id"],w:["Admin"],rows:()=>appData.students.map(M.students.to)},
+ {n:"teachers",t:"teachers",pk:["id"],w:["Admin"],rows:()=>appData.teachers.map(M.teachers.to)},
+ {n:"accounts",t:"accounts",pk:["id"],w:["Admin"],rows:()=>appData.accounts.map(M.accounts.to)},
+ {n:"announcements",t:"announcements",pk:["id"],w:["Admin"],rows:()=>appData.announcements.map(M.announcements.to)},
+ {n:"assignments",t:"assignments",pk:["id"],w:["Admin"],rows:()=>appData.assignments.map(M.assignments.to)},
+ {n:"marks",t:"marks",pk:["id"],w:["Admin","Teacher"],rows:()=>appData.marks.map(M.marks.to)},
+ {n:"sa",t:"student_attendance",pk:["date","student_id"],w:["Admin","Teacher"],rows:()=>attRows(appData.attendance,"student_id")},
+ {n:"ta",t:"teacher_attendance",pk:["date","teacher_id"],w:["Admin"],rows:()=>attRows(appData.teacherAttendance,"teacher_id")}
+];
+let snap={},syncQ=Promise.resolve();
+const rowKey=(c,r)=>c.pk.map(p=>r[p]).join("|");
+const takeSnap=()=>SYNC.forEach(c=>snap[c.n]=new Map(c.rows().map(r=>[rowKey(c,r),r])));
+async function syncToServer(){
+ const role=appData.currentUser&&appData.currentUser.role;if(!role||!sb)return;
+ for(const c of SYNC){
+  if(!c.w.includes(role))continue;
+  const cur=new Map(c.rows().map(r=>[rowKey(c,r),r])),old=snap[c.n]||new Map(),ins=[],upd=[];
+  const del=[...old.keys()].filter(k=>!cur.has(k));
+  cur.forEach((r,k)=>{if(!old.has(k))ins.push(r);else if(JSON.stringify(old.get(k))!==JSON.stringify(r))upd.push(r)});
+  for(const k of del){let q=sb.from(c.t).delete();c.pk.forEach(p=>q=q.eq(p,old.get(k)[p]));const{error}=await q;if(error)throw error}
+  if(ins.length){const{error}=await sb.from(c.t).insert(ins);if(error)throw error}
+  for(const r of upd){let q=sb.from(c.t).update(r);c.pk.forEach(p=>q=q.eq(p,r[p]));const{error}=await q;if(error)throw error}
+  snap[c.n]=cur;
+ }
+}
+function saveData(){
+ syncQ=syncQ.then(syncToServer).catch(async e=>{
+  console.error(e);showToast("Not saved: "+(e.message||e),"error");
+  try{await loadRemote();takeSnap();RENDERERS[curView]&&RENDERERS[curView]();icons()}catch(x){console.error(x)}
+ });
+}
+async function getAll(t,order=["id"]){
+ let out=[],from=0;
+ for(;;){let q=sb.from(t).select("*");order.forEach(c=>q=q.order(c));
+  const{data,error}=await q.range(from,from+999);if(error)throw error;
+  out=out.concat(data);if(data.length<1000)break;from+=1000}
+ return out;
+}
+async function loadRemote(){
+ const role=appData.currentUser.role;
+ const [st,as,an,mk,sa]=await Promise.all([getAll("students"),getAll("assignments"),getAll("announcements"),getAll("marks"),getAll("student_attendance",["date","student_id"])]);
+ appData.students=st.map(M.students.from);appData.assignments=as.map(M.assignments.from);
+ appData.announcements=an.map(M.announcements.from).sort((a,b)=>b.id-a.id);
+ appData.marks=mk.map(M.marks.from);appData.attendance=attNest(sa,"student_id");
+ if(role==="Admin"){
+  const [te,ac,ta]=await Promise.all([getAll("teachers"),getAll("accounts"),getAll("teacher_attendance",["date","teacher_id"])]);
+  appData.teachers=te.map(M.teachers.from);appData.accounts=ac.map(M.accounts.from);appData.teacherAttendance=attNest(ta,"teacher_id");
+ }else{
+  const names=await getAll("teacher_names");
+  let te=names.map(r=>({id:r.id,name:r.name,fatherName:"",cnic:"",assignedSubjects:[],classTeacherOf:""}));
+  if(role==="Teacher"){(await getAll("teachers")).forEach(r=>{const m=M.teachers.from(r),i=te.findIndex(x=>x.id===r.id);if(i>-1)te[i]=m;else te.push(m)})}
+  appData.teachers=te;appData.accounts=[];appData.teacherAttendance={};
+ }
+}
+async function startSession(user,expected){
+ const{data:p,error}=await sb.from("profiles").select("role,record_id,name").eq("id",user.id).maybeSingle();
+ if(error||!p)throw new Error("No school profile found for this account. Ask the administrator.");
+ if(expected&&p.role!==expected)throw new Error(`This account is not a ${expected}. Please choose the correct role.`);
+ appData.currentUser={role:p.role,id:p.record_id,name:p.name};
+ await loadRemote();takeSnap();initApp();
+}
+
+/* ================= HELPERS ================= */
+const $=id=>document.getElementById(id);
+const icons=()=>{try{lucide.createIcons()}catch(e){}};
+const initials=n=>String(n||"?").split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase();
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const INP="w-full px-4 py-2.5 bg-blueTint border border-blueBorder rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-royalBlue";
+const BTN="px-5 py-2.5 bg-royalBlue hover:bg-blueHover text-white font-bold rounded-xl shadow-md transition-all text-sm flex items-center justify-center gap-2";
+const CARD="bg-white rounded-2xl shadow-sm border border-blueBorder";
+const LBL="block text-xs font-bold uppercase text-royalBlue mb-1";
+const gNum=g=>parseInt(String(g).replace(/\D/g,""))||0;
+const classLabel=(g,s)=>`Class ${gNum(g)}-${s}`;
+const keyOf=(g,s)=>`${g}|${s}`;
+const labelOfKey=k=>{const[g,s]=k.split("|");return classLabel(g,s)};
+const toMin=t=>{const[h,m]=t.split(":").map(Number);return h*60+m};
+const fmtT=a=>`${a.start}–${a.end}`;
+const gradeOf=p=>p>=80?"A+":p>=70?"A":p>=60?"B":p>=50?"C":"F";
+const tName=id=>(appData.teachers.find(t=>t.id===id)||{name:"Unknown"}).name;
+const me=()=>{const u=appData.currentUser;if(!u)return null;if(u.role==="Admin")return u;
+ const r=(u.role==="Teacher"?appData.teachers:appData.students).find(x=>x.id===u.id);return r?{...r,role:u.role}:u};
+const sortKeys=ks=>ks.sort((a,b)=>{const[g1,s1]=a.split("|"),[g2,s2]=b.split("|");return gNum(g1)-gNum(g2)||s1.localeCompare(s2)});
+const allClassKeys=()=>{const set=new Set();appData.students.forEach(s=>set.add(keyOf(s.grade,s.section||"A")));appData.assignments.forEach(a=>set.add(keyOf(a.grade,a.section)));return sortKeys([...set])};
+const asgSort=(a,b)=>DAYS.indexOf(a.day)-DAYS.indexOf(b.day)||toMin(a.start)-toMin(b.start);
+const teacherAsg=id=>appData.assignments.filter(a=>a.teacherId===id).sort(asgSort);
+// Grades a teacher is connected to: from saved assignments + legacy class-teacher value (kept, not deleted)
+const teacherGrades=t=>{const s=new Set(teacherAsg(t.id).map(a=>a.grade));if(t.classTeacherOf)s.add(t.classTeacherOf);return s};
+const teacherStudents=t=>{const ks=new Set(teacherAsg(t.id).map(a=>keyOf(a.grade,a.section)));return appData.students.filter(s=>ks.has(keyOf(s.grade,s.section||"A"))||(t.classTeacherOf&&s.grade===t.classTeacherOf))};
+const attPct=(store,id)=>{let p=0,t=0;for(const d in store){const s=store[d][id];if(s){t++;if(s==="Present")p++}}return t?Math.round(p/t*100):null};
+const empty=(msg,icon="inbox")=>`<div class="p-8 text-center text-slate-500 font-semibold text-sm"><i data-lucide="${icon}" class="w-8 h-8 mx-auto mb-2 text-royalBlue opacity-60"></i>${msg}</div>`;
+const tableWrap=(head,rows,minW=600)=>`<div class="${CARD} overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-left border-collapse" style="min-width:${minW}px"><thead><tr class="bg-blueTint text-royalBlue text-xs uppercase font-poppins">${head.map(h=>`<th class="p-3 sm:p-4 whitespace-nowrap">${h}</th>`).join("")}</tr></thead><tbody class="divide-y divide-blueBorder text-sm">${rows}</tbody></table></div></div>`;
+const pill=t=>`<span class="px-3 py-1 bg-blueSoft text-royalBlue font-bold text-xs rounded-full whitespace-nowrap">${esc(t)}</span>`;
+const iconBtn=(fn,icon,danger)=>`<button onclick="${fn}" class="p-2 ${danger?"bg-red-50 hover:bg-red-500 text-red-500":"bg-blueTint hover:bg-royalBlue text-royalBlue"} hover:text-white rounded-xl transition-all" aria-label="${icon}"><i data-lucide="${icon}" class="w-4 h-4"></i></button>`;
+const avatar=(p,size="w-16 h-16 text-2xl")=>p.photo?`<img src="${esc(p.photo)}" class="${size.split(" ")[0]} ${size.split(" ")[1]} rounded-2xl object-cover flex-shrink-0" alt="">`:`<div class="${size} bg-white text-royalBlue rounded-2xl flex items-center justify-center font-extrabold shadow-inner flex-shrink-0">${esc(p.name.charAt(0).toUpperCase())}</div>`;
+
+function showToast(msg,type="success"){
+ const c=$("toast-container"),t=document.createElement("div");
+ t.className=`px-5 py-3 rounded-2xl shadow-xl text-white text-xs font-bold transition-all transform translate-y-2 opacity-0 flex items-center gap-2 self-end ${type==="success"?"bg-royalBlue":"bg-red-500"}`;
+ t.innerHTML=`<i data-lucide="${type==="success"?"check-circle":"alert-circle"}" class="w-4 h-4 flex-shrink-0"></i><span>${esc(msg)}</span>`;
+ c.appendChild(t);icons();
+ setTimeout(()=>t.classList.remove("translate-y-2","opacity-0"),50);
+ setTimeout(()=>{t.classList.add("translate-y-2","opacity-0");setTimeout(()=>t.remove(),300)},3500);
+}
+
+/* ================= AUTH ================= */
+$("login-form").addEventListener("submit",async e=>{
+ e.preventDefault();
+ if(!sb)return showToast("Database not configured. Edit config.js first.","error");
+ const role=$("login-role").value,idf=$("login-identifier").value.trim(),pw=$("login-password").value,btn=$("login-btn");
+ const email=idf.includes("@")?idf.toLowerCase():`${idf.toLowerCase()}@school.local`;
+ btn.disabled=true;btn.classList.add("opacity-60");
+ try{
+  const{data,error}=await sb.auth.signInWithPassword({email,password:pw});
+  if(error)throw new Error(/invalid login credentials/i.test(error.message)?"Invalid ID or password.":error.message);
+  try{await startSession(data.user,role);showToast(`Welcome back, ${appData.currentUser.name}!`)}
+  catch(err){await sb.auth.signOut();throw err}
+ }catch(err){showToast(err.message,"error")}
+ btn.disabled=false;btn.classList.remove("opacity-60");
+});
+async function logout(){
+ if(sb)await sb.auth.signOut();
+ appData.currentUser=null;["students","teachers","accounts","announcements","assignments","marks"].forEach(k=>appData[k]=[]);
+ appData.attendance={};appData.teacherAttendance={};snap={};$("login-password").value="";
+ $("auth-wrapper").classList.remove("hidden");$("app-wrapper").classList.add("hidden");showToast("Logged out successfully");
+}
+
+/* ================= NAV ================= */
+let NAV=[],curView="dashboard";
+function toggleSidebar(){$("sidebar").classList.toggle("-translate-x-full");$("sidebar-backdrop").classList.toggle("hidden")}
+function closeSidebarIfMobile(){if(window.innerWidth<1024&&!$("sidebar").classList.contains("-translate-x-full"))toggleSidebar()}
+window.addEventListener("resize",()=>{if(window.innerWidth>=1024)$("sidebar-backdrop").classList.add("hidden")});
+
+function initApp(){
+ const u=me();if(!u)return;
+ $("auth-wrapper").classList.add("hidden");$("app-wrapper").classList.remove("hidden");
+ $("user-display-name").innerText=u.name;
+ $("user-display-role").innerText=u.role==="Admin"?"Administrator":`${u.role} Portal`;
+ $("user-avatar-initial").innerText=initials(u.name);
+ const R=u.role;
+ if(R==="Admin")NAV=[
+  ["dashboard","Dashboard","layout-dashboard"],["students","Student Management","users"],["teachers","Teacher Management","user-check"],
+  ["timetable","Class Timetable & Subject Assignment","calendar-clock"],["attendance","Attendance Management","calendar-check"],
+  ["marks","Marks & Results","award"],["accounts","Account Management","key"],["announcements","Announcements","megaphone"],["reports","Reports","file-text"]];
+ else if(R==="Teacher")NAV=[
+  ["dashboard","Dashboard","layout-dashboard"],["my-profile","My Profile","user"],["my-classes","My Classes & Subjects","book-open"],
+  ["attendance","Attendance Management","calendar-check"],["marks","Marks & Results","award"],["announcements","Announcements","megaphone"]];
+ else NAV=[
+  ["dashboard","Dashboard","layout-dashboard"],["my-profile-student","My Profile","user"],["attendance","My Attendance","calendar-check"],
+  ["marks","My Results","award"],["my-subjects","My Subjects","book-open"],["announcements","Announcements","megaphone"]];
+ $("sidebar-nav").innerHTML=NAV.map(n=>`<button onclick="switchView('${n[0]}')" id="nav-btn-${n[0]}" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm text-left transition-all text-slate-600 hover:bg-blueTint hover:text-royalBlue"><i data-lucide="${n[2]}" class="w-5 h-5 flex-shrink-0"></i><span class="leading-tight">${n[1]}</span></button>`).join("");
+ switchView("dashboard");
+}
+
+const RENDERERS={dashboard:()=>renderDashboard(),announcements:()=>renderAnnouncements(),"my-profile":()=>renderTeacherProfile(),
+ "my-profile-student":()=>renderStudentProfile(),"my-classes":()=>renderMyClasses(),"my-subjects":()=>renderStudentSubjects(),
+ students:()=>renderStudents(),teachers:()=>renderTeachers(),attendance:()=>renderAttendance(),marks:()=>renderMarks(),
+ timetable:()=>renderTimetable(),accounts:()=>renderAccounts(),reports:()=>renderReports()};
+
+function switchView(id){
+ document.querySelectorAll("#main-area > section").forEach(s=>s.classList.add("hidden"));
+ NAV.forEach(n=>{const b=$("nav-btn-"+n[0]);if(b)b.className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm text-left transition-all text-slate-600 hover:bg-blueTint hover:text-royalBlue"});
+ const v=$("view-"+id);if(!v)return;curView=id;
+ v.classList.remove("hidden");v.classList.remove("view-anim");void v.offsetWidth;v.classList.add("view-anim");
+ const b=$("nav-btn-"+id);if(b)b.className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm text-left transition-all bg-royalBlue text-white shadow-md";
+ const n=NAV.find(x=>x[0]===id);$("page-title").innerText=n?n[1]:id;
+ closeSidebarIfMobile();
+ $("main-area").scrollTop=0;
+ RENDERERS[id]&&RENDERERS[id]();
+ icons();
+}
+
+/* ================= ANNOUNCEMENTS ================= */
+function annCards(limit,compact){
+ const list=limit?appData.announcements.slice(0,limit):appData.announcements;
+ if(!list.length)return empty("No announcements posted yet.","bell-off");
+ const isAdmin=me().role==="Admin";
+ return list.map(a=>`<div class="p-4 bg-blueTint rounded-xl border border-blueBorder space-y-1 lift">
+  <div class="flex items-start justify-between gap-2"><h4 class="font-bold font-poppins text-royalBlue ${compact?"text-xs":"text-sm"} break-words min-w-0">${esc(a.title)}</h4>
+  <div class="flex items-center gap-2 flex-shrink-0"><span class="text-[11px] text-slate-500 font-semibold">${esc(a.date)}</span>${!compact&&isAdmin?iconBtn(`deleteAnnouncement(${a.id})`,"trash-2",true):""}</div></div>
+  <p class="text-xs text-slate-600 leading-relaxed break-words">${esc(a.content)}</p></div>`).join("");
+}
+function renderAnnouncements(){
+ const isAdmin=me().role==="Admin";
+ $("view-announcements").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-blueBorder pb-4 gap-3">
+   <h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="megaphone" class="w-6 h-6"></i>Official School Announcements</h2>
+   ${isAdmin?`<button onclick="openAnnouncementModal()" class="${BTN}"><i data-lucide="plus" class="w-4 h-4"></i>Create Announcement</button>`:""}</div>
+  <div class="space-y-3">${annCards()}</div></div>`;
+ icons();
+}
+function openAnnouncementModal(){
+ openModal(modalHead("Post New Notice / Announcement")+`<form onsubmit="saveAnnouncement(event)" class="p-5 sm:p-6 space-y-4">
+  <div><label class="${LBL}">Notice Title</label><input id="m-anc-title" required class="${INP}"></div>
+  <div><label class="${LBL}">Content</label><textarea id="m-anc-content" required rows="4" class="${INP}"></textarea></div>
+  <button class="${BTN} w-full">Publish Announcement</button></form>`);
+}
+function saveAnnouncement(e){
+ e.preventDefault();
+ appData.announcements.unshift({id:Date.now(),title:$("m-anc-title").value.trim(),date:new Date().toISOString().split("T")[0],content:$("m-anc-content").value.trim()});
+ saveData();closeModal();renderDashboardIfVisible();showToast("Announcement published successfully!");
+}
+function deleteAnnouncement(id){if(!confirm("Delete this announcement?"))return;appData.announcements=appData.announcements.filter(a=>a.id!==id);saveData();renderAnnouncements();showToast("Announcement removed","error")}
+function renderDashboardIfVisible(){if(!$("view-dashboard").classList.contains("hidden"))renderDashboard();if(!$("view-announcements").classList.contains("hidden"))renderAnnouncements()}
+
+/* ================= DASHBOARDS ================= */
+function statCard(icon,label,val){return `<div class="${CARD} p-5 flex items-center gap-4 lift"><div class="w-12 h-12 bg-blueTint text-royalBlue rounded-xl flex items-center justify-center flex-shrink-0"><i data-lucide="${icon}" class="w-6 h-6"></i></div><div class="min-w-0"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider">${label}</p><h3 class="text-2xl font-bold font-poppins text-royalBlue">${val}</h3></div></div>`}
+function renderDashboard(){
+ const u=me(),v=$("view-dashboard");
+ if(u.role==="Admin"){
+  v.innerHTML=`<div class="bg-gradient-to-r from-royalBlue to-blueHover text-white p-5 sm:p-8 rounded-3xl shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
+   <div class="flex flex-col sm:flex-row items-center text-center sm:text-left gap-4">
+    <div class="w-16 h-16 bg-white text-royalBlue rounded-2xl flex items-center justify-center font-extrabold text-2xl flex-shrink-0">${esc(initials(u.name))}</div>
+    <div><h2 class="text-xl sm:text-2xl font-bold font-poppins">Welcome back, ${esc(u.name)}!</h2><p class="text-blue-100 font-semibold text-xs sm:text-sm mt-0.5">Administrator Portal & Institutional Control Center</p></div></div>
+   <div class="flex flex-wrap justify-center gap-2.5 w-full md:w-auto">
+    <button onclick="switchView('students')" class="px-4 py-2.5 bg-white text-royalBlue font-bold rounded-xl text-xs hover:bg-blueSoft flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i>Add Student</button>
+    <button onclick="switchView('teachers')" class="px-4 py-2.5 bg-white text-royalBlue font-bold rounded-xl text-xs hover:bg-blueSoft flex items-center gap-2"><i data-lucide="user-check" class="w-4 h-4"></i>Add Teacher</button>
+    <button onclick="switchView('timetable')" class="px-4 py-2.5 bg-white text-royalBlue font-bold rounded-xl text-xs hover:bg-blueSoft flex items-center gap-2"><i data-lucide="calendar-clock" class="w-4 h-4"></i>Timetable</button></div></div>
+   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">${statCard("users","Total Students",appData.students.length)}${statCard("user-check","Total Teachers",appData.teachers.length)}${statCard("calendar-clock","Teaching Assignments",appData.assignments.length)}${statCard("award","Exam Records",appData.marks.length)}</div>
+   <div class="${CARD} p-4 sm:p-6 space-y-4"><div class="flex items-center justify-between border-b border-blueBorder pb-4 gap-3"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="bell" class="w-5 h-5"></i>Notice Board</h2><button onclick="openAnnouncementModal()" class="${BTN}"><i data-lucide="plus" class="w-4 h-4"></i>New Notice</button></div><div class="space-y-3">${annCards(5)}</div></div>`;
+ }else if(u.role==="Teacher"){
+  const studs=teacherStudents(u),asg=teacherAsg(u.id);
+  const cr=attPct(appData.attendance,"__none__");
+  let p=0,t=0;studs.forEach(s=>{const r=attPct(appData.attendance,s.id);if(r!==null){p+=r;t++}});
+  const rate=t?Math.round(p/t)+"%":"N/A";
+  const subj=[...new Map(asg.map(a=>[a.subject+a.grade+a.section,a])).values()];
+  v.innerHTML=`<div class="bg-gradient-to-r from-royalBlue to-blueHover text-white p-5 sm:p-8 rounded-3xl shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
+   <div class="flex flex-col sm:flex-row items-center text-center sm:text-left gap-4">${avatar(u)}
+    <div><h2 class="text-xl sm:text-2xl font-bold font-poppins">Welcome, Teacher!</h2><p class="text-blue-100 font-semibold text-sm">${esc(u.name)}</p>
+    <div class="flex flex-wrap justify-center sm:justify-start gap-2 mt-3"><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">ID: ${esc(u.id)}</span><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">${asg.length} weekly periods</span></div></div></div>
+   <div class="grid grid-cols-2 gap-3 w-full md:w-auto">
+    <div class="bg-white/10 p-4 rounded-2xl border border-white/20 text-center"><span class="text-xs font-bold uppercase text-blue-100 block">My Students</span><span class="text-2xl font-extrabold font-poppins">${studs.length}</span></div>
+    <div class="bg-white/10 p-4 rounded-2xl border border-white/20 text-center"><span class="text-xs font-bold uppercase text-blue-100 block">Attendance Rate</span><span class="text-2xl font-extrabold font-poppins">${rate}</span></div></div></div>
+   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="${CARD} p-5 space-y-3"><h3 class="font-bold font-poppins text-royalBlue flex items-center gap-2 border-b border-blueBorder pb-3"><i data-lucide="book-open" class="w-5 h-5"></i>Assigned Subjects & Classes</h3>
+     ${subj.length?subj.map(a=>`<div class="p-3 bg-blueTint rounded-xl border border-blueBorder flex items-center justify-between gap-2 text-xs"><span class="font-bold text-royalBlue">${esc(a.subject)}</span><span class="text-slate-600 font-semibold whitespace-nowrap">${classLabel(a.grade,a.section)}</span></div>`).join(""):`<p class="text-xs text-slate-500 italic">No assignments yet. The administrator assigns classes in Class Timetable & Subject Assignment.</p>`}</div>
+    <div class="${CARD} p-5 space-y-3"><h3 class="font-bold font-poppins text-royalBlue flex items-center gap-2 border-b border-blueBorder pb-3"><i data-lucide="bell" class="w-5 h-5"></i>Announcements</h3>${annCards(3,true)}</div></div>`;
+ }else renderStudentDashboard(u,v);
+}
+function renderStudentDashboard(u,v){
+ const pct=attPct(appData.attendance,u.id);
+ const my=appData.marks.filter(m=>m.studentId===u.id);
+ const ob=my.reduce((a,m)=>a+m.obtained,0),tt=my.reduce((a,m)=>a+m.total,0);
+ const rp=tt?Math.round(ob/tt*100):null;
+ const subs=subjectRows(u);
+ v.innerHTML=`<div class="bg-gradient-to-r from-royalBlue to-blueHover text-white p-5 sm:p-8 rounded-3xl shadow-md space-y-5">
+   <div class="flex items-center gap-2 text-blue-100 font-poppins font-bold text-sm sm:text-base"><i data-lucide="school" class="w-5 h-5"></i>${esc(appData.settings.schoolName||SCHOOL_NAME)}</div>
+   <div class="flex flex-col sm:flex-row items-center text-center sm:text-left gap-4">${avatar(u,"w-20 h-20 text-3xl")}
+    <div class="min-w-0"><h2 class="text-2xl sm:text-3xl font-bold font-poppins">Welcome, Student!</h2><p class="text-blue-100 font-semibold mt-0.5 break-words">${esc(u.name)}</p>
+    <div class="flex flex-wrap justify-center sm:justify-start gap-2 mt-3"><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">ID: ${esc(u.id)}</span><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">${classLabel(u.grade,u.section||"A")}</span><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">Father: ${esc(u.fatherName)}</span></div></div></div></div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   <div class="${CARD} p-5 lift"><div class="flex items-center gap-3 text-royalBlue font-bold font-poppins"><i data-lucide="calendar-check" class="w-5 h-5"></i>Attendance</div>
+    ${pct!==null?`<p class="text-3xl font-extrabold font-poppins text-royalBlue mt-3">${pct}%</p><p class="text-xs text-slate-500 mt-1">All recorded school days</p>`:`<p class="text-sm text-slate-500 mt-3 font-semibold">No attendance data available</p>`}</div>
+   <div class="${CARD} p-5 lift"><div class="flex items-center gap-3 text-royalBlue font-bold font-poppins"><i data-lucide="award" class="w-5 h-5"></i>Result</div>
+    ${rp!==null?`<p class="text-3xl font-extrabold font-poppins text-royalBlue mt-3">${rp}% <span class="text-base">(${gradeOf(rp)})</span></p><p class="text-xs text-slate-500 mt-1">Across ${my.length} exam record(s)</p>`:`<p class="text-sm text-slate-500 mt-3 font-semibold">No results published yet</p>`}</div></div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   <div class="${CARD} p-5 space-y-3"><h3 class="font-bold font-poppins text-royalBlue flex items-center gap-2 border-b border-blueBorder pb-3"><i data-lucide="book-open" class="w-5 h-5"></i>My Subjects</h3>
+    ${subs.length?subs.map(s=>`<div class="p-3 bg-blueTint rounded-xl border border-blueBorder flex items-center justify-between gap-2 text-xs"><span class="font-bold text-royalBlue">${esc(s.subject)}</span><span class="text-slate-600 font-semibold text-right">${esc(s.teacher)}</span></div>`).join(""):empty("No subjects found for your class.")}</div>
+   <div class="${CARD} p-5 space-y-3"><h3 class="font-bold font-poppins text-royalBlue flex items-center gap-2 border-b border-blueBorder pb-3"><i data-lucide="bell" class="w-5 h-5"></i>Announcements</h3>${annCards(3,true)}</div></div>`;
+}
+// subjects for a student's class + teacher from saved assignments
+function subjectRows(s){
+ const sec=s.section||"A",names=new Set(appData.subjectsCatalog[s.grade]||[]);
+ appData.assignments.filter(a=>a.grade===s.grade&&a.section===sec).forEach(a=>names.add(a.subject));
+ return [...names].map(sub=>{
+  const a=appData.assignments.find(x=>x.grade===s.grade&&x.section===sec&&x.subject===sub);
+  let teacher=a?tName(a.teacherId):null;
+  if(!teacher){const t=appData.teachers.find(t=>(t.assignedSubjects||[]).some(x=>x===sub||x===`${sub} (${s.grade})`));teacher=t?t.name:"To be assigned"}
+  return {subject:sub,teacher};
+ });
+}
+
+/* ================= PROFILES / MY SUBJECTS ================= */
+function profileRow(l,v){return `<div class="p-4 bg-blueTint rounded-2xl border border-blueBorder"><span class="text-xs font-bold text-slate-400 uppercase block">${l}</span><span class="font-bold text-royalBlue mt-1 block break-words">${esc(v||"-")}</span></div>`}
+function renderTeacherProfile(){
+ const u=me(),subs=[...new Set(teacherAsg(u.id).map(a=>a.subject))];
+ $("view-my-profile").innerHTML=`<div class="${CARD} p-5 sm:p-8 space-y-6 max-w-2xl mx-auto"><div class="flex flex-col items-center text-center pb-6 border-b border-blueBorder gap-3">
+  <div class="w-24 h-24 bg-royalBlue text-white rounded-3xl flex items-center justify-center font-extrabold text-4xl shadow-md">${esc(u.name.charAt(0))}</div>
+  <div><h2 class="text-xl sm:text-2xl font-bold font-poppins text-royalBlue">${esc(u.name)}</h2><p class="text-xs font-bold text-slate-400 mt-1 uppercase">Teacher ID: ${esc(u.id)}</p></div></div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">${profileRow("Father Name",u.fatherName)}${profileRow("CNIC Number",u.cnic)}${profileRow("Teaching Subjects",subs.join(", ")||"None assigned yet")}${profileRow("Weekly Periods",teacherAsg(u.id).length)}</div></div>`;
+}
+function renderStudentProfile(){
+ const u=me();
+ $("view-my-profile-student").innerHTML=`<div class="${CARD} p-5 sm:p-8 space-y-6 max-w-2xl mx-auto"><div class="flex flex-col items-center text-center pb-6 border-b border-blueBorder gap-3">
+  ${u.photo?`<img src="${esc(u.photo)}" class="w-24 h-24 rounded-3xl object-cover" alt="">`:`<div class="w-24 h-24 bg-royalBlue text-white rounded-3xl flex items-center justify-center font-extrabold text-4xl shadow-md">${esc(u.name.charAt(0))}</div>`}
+  <div><h2 class="text-xl sm:text-2xl font-bold font-poppins text-royalBlue">${esc(u.name)}</h2><p class="text-xs font-bold text-slate-400 mt-1 uppercase">Student ID: ${esc(u.id)}</p></div></div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">${profileRow("Father Name",u.fatherName)}${profileRow("CNIC / B-Form",u.cnic)}${profileRow("Class / Section",classLabel(u.grade,u.section||"A"))}${profileRow("Portal Access Role","Student Verified Account")}</div></div>`;
+}
+function renderStudentSubjects(){
+ const u=me(),rows=subjectRows(u);
+ $("view-my-subjects").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4"><div class="border-b border-blueBorder pb-4"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="book-open" class="w-6 h-6"></i>My Enrolled Subjects & Assigned Teachers</h2><p class="text-xs text-slate-500 mt-1">${classLabel(u.grade,u.section||"A")}</p></div>
+ <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${rows.map(r=>`<div class="p-5 bg-blueTint rounded-2xl border border-blueBorder space-y-3 lift"><span class="text-[10px] font-extrabold uppercase text-royalBlue bg-white px-2.5 py-1 rounded-full border border-blueBorder inline-block">Subject</span><h4 class="font-bold font-poppins text-royalBlue text-base">${esc(r.subject)}</h4>
+ <div class="p-3 bg-white rounded-xl border border-blueBorder flex items-center gap-3"><div class="w-9 h-9 bg-blueTint text-royalBlue rounded-lg flex items-center justify-center flex-shrink-0"><i data-lucide="user-check" class="w-4 h-4"></i></div><div class="min-w-0"><span class="text-[10px] text-slate-400 font-bold uppercase block">Assigned Teacher</span><span class="text-xs font-bold text-slate-800 block break-words">${esc(r.teacher)}</span></div></div></div>`).join("")}</div></div>`;
+}
+
+/* ================= TEACHER: MY CLASSES & SUBJECTS (timetable only) ================= */
+function renderMyClasses(){
+ const u=me(),asg=teacherAsg(u.id);
+ const keys=sortKeys([...new Set(asg.map(a=>keyOf(a.grade,a.section)))]);
+ $("view-my-classes").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4">
+  <div class="border-b border-blueBorder pb-4"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="calendar-clock" class="w-6 h-6"></i>Teaching Assignments & Timetable</h2>
+  <p class="text-xs text-slate-500 mt-1">Your classes, subjects, days and times. Set by the administrator.</p></div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   <select id="tc-day" onchange="renderTCTable()" class="${INP}"><option value="">All days</option>${DAYS.map(d=>`<option>${d}</option>`).join("")}</select>
+   <select id="tc-class" onchange="renderTCTable()" class="${INP}"><option value="">All my classes</option>${keys.map(k=>`<option value="${k}">${labelOfKey(k)}</option>`).join("")}</select></div>
+  <div id="tc-table"></div></div>`;
+ renderTCTable();
+}
+function renderTCTable(){
+ const u=me(),d=$("tc-day").value,c=$("tc-class").value;
+ let list=teacherAsg(u.id).filter(a=>(!d||a.day===d)&&(!c||keyOf(a.grade,a.section)===c));
+ $("tc-table").innerHTML=list.length?tableWrap(["Day","Time","Class / Section","Subject"],list.map(a=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${a.day}</td><td class="p-3 sm:p-4 font-semibold whitespace-nowrap">${fmtT(a)}</td><td class="p-3 sm:p-4">${pill(classLabel(a.grade,a.section))}</td><td class="p-3 sm:p-4 font-semibold">${esc(a.subject)}</td></tr>`).join(""),520)
+  :`<div class="${CARD}">${empty("No teaching assignments found. Assignments appear here after the administrator creates them.","calendar-x")}</div>`;
+ icons();
+}
+
+/* ================= STUDENTS (ADMIN) ================= */
+function renderStudents(){
+ $("view-students").innerHTML=`<div class="${CARD} p-4 sm:p-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+  <div class="w-full md:w-96 relative"><i data-lucide="search" class="w-5 h-5 text-royalBlue absolute left-4 top-3"></i><input id="student-search" oninput="renderStudentRows()" placeholder="Search by name, roll, grade or CNIC..." class="${INP} pl-12"></div>
+  <button onclick="openStudentModal()" class="${BTN}"><i data-lucide="user-plus" class="w-5 h-5"></i>Add New Student</button></div><div id="students-table"></div>`;
+ renderStudentRows();
+}
+function renderStudentRows(){
+ const q=($("student-search").value||"").toLowerCase();
+ const f=appData.students.filter(s=>[s.name,s.id,s.grade,s.cnic,classLabel(s.grade,s.section||"A")].some(x=>String(x).toLowerCase().includes(q)));
+ $("students-table").innerHTML=f.length?tableWrap(["Roll / ID","Student Name","Father Name","CNIC / B-Form","Class","Actions"],f.map(s=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(s.id)}</td><td class="p-3 sm:p-4 font-semibold">${esc(s.name)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(s.fatherName)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(s.cnic)}</td><td class="p-3 sm:p-4">${pill(classLabel(s.grade,s.section||"A"))}</td><td class="p-3 sm:p-4 text-right whitespace-nowrap space-x-2">${iconBtn(`openStudentModal('${s.id}')`,"edit")}${iconBtn(`deleteStudent('${s.id}')`,"trash-2",true)}</td></tr>`).join(""),760):`<div class="${CARD}">${empty("No students match your search.","users")}</div>`;
+ icons();
+}
+function modalHead(t){return `<div class="p-5 sm:p-6 bg-royalBlue text-white flex items-center justify-between sticky top-0 z-10"><h3 class="font-bold font-poppins text-lg">${t}</h3><button type="button" onclick="closeModal()" class="p-1.5 bg-white/10 hover:bg-white/20 rounded-xl"><i data-lucide="x" class="w-5 h-5"></i></button></div>`}
+function openStudentModal(id=null){
+ const s=id?appData.students.find(x=>x.id===id):{id:`STD-${Math.floor(100+Math.random()*900)}`,name:"",fatherName:"",cnic:"",grade:"Grade 12",section:"A"};
+ openModal(modalHead(id?"Edit Student Record":"Add New Student")+`<form onsubmit="saveStudent(event,'${s.id}',${!!id})" class="p-5 sm:p-6 space-y-4">
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   <div><label class="${LBL}">Student ID</label><input id="m-std-id" required value="${esc(s.id)}" class="${INP}" ${id?"readonly":""}></div>
+   <div><label class="${LBL}">Grade</label><select id="m-std-grade" class="${INP}">${appData.gradeList.map(g=>`<option ${s.grade===g?"selected":""}>${g}</option>`).join("")}</select></div>
+   <div><label class="${LBL}">Section</label><select id="m-std-sec" class="${INP}">${SECTIONS.map(x=>`<option ${(s.section||"A")===x?"selected":""}>${x}</option>`).join("")}</select></div></div>
+  <div><label class="${LBL}">Full Name</label><input id="m-std-name" required value="${esc(s.name)}" class="${INP}"></div>
+  <div><label class="${LBL}">Father Name</label><input id="m-std-fname" required value="${esc(s.fatherName)}" class="${INP}"></div>
+  <div><label class="${LBL}">CNIC / B-Form</label><input id="m-std-cnic" required value="${esc(s.cnic)}" class="${INP}"></div>
+  <button class="${BTN} w-full">Save Student Record</button></form>`);
+}
+function saveStudent(e,oldId,isEdit){
+ e.preventDefault();
+ const rec={id:$("m-std-id").value.trim(),name:$("m-std-name").value.trim(),fatherName:$("m-std-fname").value.trim(),cnic:$("m-std-cnic").value.trim(),grade:$("m-std-grade").value,section:$("m-std-sec").value};
+ if(isEdit){const i=appData.students.findIndex(s=>s.id===oldId);if(i>-1)appData.students[i]={...appData.students[i],...rec,id:oldId}}
+ else{if(appData.students.some(s=>s.id===rec.id))return showToast("Student ID already exists.","error");appData.students.push(rec)}
+ saveData();closeModal();renderStudentRows();showToast("Student record saved successfully!");
+}
+async function deleteStudent(id){if(!confirm("Delete this student record?"))return;await dropAccountFor(id,"Student");appData.students=appData.students.filter(s=>s.id!==id);saveData();renderStudentRows();showToast("Student deleted","error")}
+
+/* ================= TEACHERS (profile only, no class assignment) ================= */
+function renderTeachers(){
+ $("view-teachers").innerHTML=`<div class="${CARD} p-4 sm:p-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+  <div class="w-full md:w-96 relative"><i data-lucide="search" class="w-5 h-5 text-royalBlue absolute left-4 top-3"></i><input id="teacher-search" oninput="renderTeacherRows()" placeholder="Search teachers by name or ID..." class="${INP} pl-12"></div>
+  <button onclick="openTeacherModal()" class="${BTN}"><i data-lucide="user-plus" class="w-5 h-5"></i>Add New Teacher</button></div>
+  <p class="text-xs text-slate-500 px-1">Classes and subjects are assigned in <b class="text-royalBlue">Class Timetable & Subject Assignment</b>.</p><div id="teachers-table"></div>`;
+ renderTeacherRows();
+}
+function renderTeacherRows(){
+ const q=($("teacher-search").value||"").toLowerCase();
+ const f=appData.teachers.filter(t=>t.name.toLowerCase().includes(q)||t.id.toLowerCase().includes(q));
+ $("teachers-table").innerHTML=f.length?tableWrap(["Teacher ID","Full Name","Father Name","CNIC Number","Actions"],f.map(t=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(t.id)}</td><td class="p-3 sm:p-4 font-semibold">${esc(t.name)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(t.fatherName)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(t.cnic)}</td><td class="p-3 sm:p-4 text-right whitespace-nowrap space-x-2">${iconBtn(`openTeacherModal('${t.id}')`,"edit")}${iconBtn(`deleteTeacher('${t.id}')`,"trash-2",true)}</td></tr>`).join(""),640):`<div class="${CARD}">${empty("No teachers found.","user-x")}</div>`;
+ icons();
+}
+function openTeacherModal(id=null){
+ const t=id?appData.teachers.find(x=>x.id===id):{id:`TCH-${Math.floor(100+Math.random()*900)}`,name:"",fatherName:"",cnic:""};
+ openModal(modalHead(id?"Edit Teacher Record":"Add New Teacher")+`<form onsubmit="saveTeacher(event,'${t.id}',${!!id})" class="p-5 sm:p-6 space-y-4">
+  <div><label class="${LBL}">Teacher ID</label><input id="m-tch-id" required value="${esc(t.id)}" class="${INP}" ${id?"readonly":""}></div>
+  <div><label class="${LBL}">Full Name</label><input id="m-tch-name" required value="${esc(t.name)}" class="${INP}"></div>
+  <div><label class="${LBL}">Father Name</label><input id="m-tch-fname" required value="${esc(t.fatherName)}" class="${INP}"></div>
+  <div><label class="${LBL}">CNIC Number</label><input id="m-tch-cnic" required value="${esc(t.cnic)}" class="${INP}"></div>
+  <button class="${BTN} w-full">Save Teacher Record</button></form>`);
+}
+function saveTeacher(e,oldId,isEdit){
+ e.preventDefault();
+ const rec={name:$("m-tch-name").value.trim(),fatherName:$("m-tch-fname").value.trim(),cnic:$("m-tch-cnic").value.trim()};
+ const id=$("m-tch-id").value.trim();
+ if(isEdit){const i=appData.teachers.findIndex(t=>t.id===oldId);if(i>-1)appData.teachers[i]={...appData.teachers[i],...rec}} // old class data preserved
+ else{if(appData.teachers.some(t=>t.id===id))return showToast("Teacher ID already exists.","error");appData.teachers.push({id,...rec,assignedSubjects:[],classTeacherOf:""})}
+ saveData();closeModal();renderTeacherRows();showToast("Teacher record saved successfully!");
+}
+async function deleteTeacher(id){
+ const n=appData.assignments.filter(a=>a.teacherId===id).length;
+ if(!confirm(`Delete this teacher${n?` and their ${n} timetable assignment(s)`:""}?`))return;
+ await dropAccountFor(id,"Teacher");appData.teachers=appData.teachers.filter(t=>t.id!==id);appData.assignments=appData.assignments.filter(a=>a.teacherId!==id);
+ saveData();renderTeacherRows();showToast("Teacher deleted","error");
+}
+
+/* ================= TIMETABLE & SUBJECT ASSIGNMENT (ADMIN) ================= */
+let ttEditId=null;
+function renderTimetable(){
+ ttEditId=null;
+ const keys=allClassKeys();
+ $("view-timetable").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4">
+  <div class="border-b border-blueBorder pb-3"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="calendar-clock" class="w-6 h-6"></i><span id="tt-form-title">Assign Teacher, Subject & Period</span></h2>
+  <p class="text-xs text-slate-500 mt-1">Saved assignments feed the class timetable, teacher schedules and student subject lists.</p></div>
+  <form id="tt-form" onsubmit="saveAssignment(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   <div><label class="${LBL}">Grade</label><select id="tt-grade" onchange="fillSubjects()" class="${INP}">${appData.gradeList.map(g=>`<option>${g}</option>`).join("")}</select></div>
+   <div><label class="${LBL}">Section</label><select id="tt-sec" class="${INP}">${SECTIONS.map(s=>`<option>${s}</option>`).join("")}</select></div>
+   <div><label class="${LBL}">Subject</label><select id="tt-sub" class="${INP}"></select></div>
+   <div><label class="${LBL}">Teacher</label><select id="tt-tch" class="${INP}"><option value="">Select teacher</option>${appData.teachers.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.id})</option>`).join("")}</select></div>
+   <div><label class="${LBL}">Day</label><select id="tt-day" class="${INP}"><option value="ALL">All Days (Mon–Sat)</option>${DAYS.map(d=>`<option>${d}</option>`).join("")}</select></div>
+   <div><label class="${LBL}">Start Time</label><input type="time" id="tt-start" class="${INP}"></div>
+   <div><label class="${LBL}">End Time</label><input type="time" id="tt-end" class="${INP}"></div>
+   <div class="flex items-end gap-2"><button class="${BTN} flex-1" id="tt-save-btn"><i data-lucide="save" class="w-4 h-4"></i>Save Assignment</button><button type="button" id="tt-cancel" onclick="resetTTForm()" class="hidden px-4 py-2.5 bg-blueTint text-royalBlue border border-blueBorder rounded-xl font-bold text-sm">Cancel</button></div>
+  </form><div id="tt-msg" class="hidden p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-bold"></div></div>
+  <div class="${CARD} p-4 sm:p-6 space-y-4"><div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><h3 class="font-bold font-poppins text-royalBlue">Class Timetable</h3>
+   <div class="flex flex-col sm:flex-row gap-2"><select id="tt-filter" onchange="renderTTTable()" class="${INP} sm:w-56">${keys.map(k=>`<option value="${k}">${labelOfKey(k)}</option>`).join("")}</select><select id="tt-dayf" onchange="renderTTTable()" class="${INP} sm:w-44"><option value="">All Days</option>${DAYS.map(d=>`<option>${d}</option>`).join("")}</select></div></div><div id="tt-table"></div></div>`;
+ fillSubjects();renderTTTable();
+}
+function fillSubjects(sel){
+ const g=$("tt-grade").value;
+ $("tt-sub").innerHTML=(appData.subjectsCatalog[g]||[]).map(s=>`<option ${s===sel?"selected":""}>${esc(s)}</option>`).join("");
+}
+function ttError(m){const b=$("tt-msg");b.textContent=m;b.classList.remove("hidden");showToast(m,"error")}
+function ttConflict(a,ex){
+ const others=appData.assignments.filter(x=>x.id!==ex&&x.day===a.day&&toMin(a.start)<toMin(x.end)&&toMin(x.start)<toMin(a.end));
+ const cc=others.find(x=>x.grade===a.grade&&x.section===a.section);
+ if(cc)return `${a.day}: ${classLabel(a.grade,a.section)} already has ${cc.subject} at ${fmtT(cc)}.`;
+ const tc=others.find(x=>x.teacherId===a.teacherId);
+ if(tc)return `${a.day}: ${tName(a.teacherId)} is already teaching ${classLabel(tc.grade,tc.section)} at ${fmtT(tc)}.`;
+ return null;
+}
+function saveAssignment(e){
+ e.preventDefault();$("tt-msg").classList.add("hidden");
+ const a={grade:$("tt-grade").value,section:$("tt-sec").value,subject:$("tt-sub").value,teacherId:$("tt-tch").value,day:$("tt-day").value,start:$("tt-start").value,end:$("tt-end").value};
+ if(!a.grade||!a.section||!a.subject||!a.teacherId||!a.day||!a.start||!a.end)return ttError("Please complete all required fields.");
+ if(!appData.teachers.some(t=>t.id===a.teacherId))return ttError("Selected teacher does not exist.");
+ if(!(appData.subjectsCatalog[a.grade]||[]).includes(a.subject))return ttError("Selected subject is not available for this grade.");
+ if(toMin(a.end)<=toMin(a.start))return ttError("End time must be later than start time.");
+ const all=a.day==="ALL";
+ if(all&&ttEditId)return ttError("To edit, choose one single day. 'All Days' is only for creating new assignments.");
+ const days=all?DAYS:[a.day];
+ for(const d of days){const err=ttConflict({...a,day:d},ttEditId);if(err)return ttError(err+(all?" Nothing was saved.":""))}
+ if(ttEditId){const i=appData.assignments.findIndex(x=>x.id===ttEditId);appData.assignments[i]={...appData.assignments[i],...a}}
+ else days.forEach((d,n)=>appData.assignments.push({id:"ASG-"+Date.now()+"-"+n,...a,day:d}));
+ saveData();
+ const keys=allClassKeys();$("tt-filter").innerHTML=keys.map(k=>`<option value="${k}">${labelOfKey(k)}</option>`).join("");$("tt-filter").value=keyOf(a.grade,a.section);
+ const wasEdit=!!ttEditId;resetTTForm();renderTTTable();showToast(wasEdit?"Assignment updated!":all?`Saved for all ${days.length} days!`:"Assignment saved!");
+}
+function resetTTForm(){ttEditId=null;$("tt-form").reset();fillSubjects();$("tt-form-title").innerText="Assign Teacher, Subject & Period";$("tt-cancel").classList.add("hidden");$("tt-msg").classList.add("hidden")}
+function editAssignment(id){
+ const a=appData.assignments.find(x=>x.id===id);if(!a)return;ttEditId=id;
+ $("tt-grade").value=a.grade;$("tt-sec").value=a.section;fillSubjects(a.subject);$("tt-sub").value=a.subject;
+ $("tt-tch").value=a.teacherId;$("tt-day").value=a.day;$("tt-start").value=a.start;$("tt-end").value=a.end;
+ $("tt-form-title").innerText="Edit Assignment";$("tt-cancel").classList.remove("hidden");
+ $("main-area").scrollTo({top:0,behavior:"smooth"});
+}
+function deleteAssignment(id){if(!confirm("Remove this assignment from the timetable?"))return;appData.assignments=appData.assignments.filter(a=>a.id!==id);saveData();if(ttEditId===id)resetTTForm();renderTTTable();showToast("Assignment removed","error")}
+function renderTTTable(){
+ const k=$("tt-filter").value,[g,s]=(k||"|").split("|");
+ const list=appData.assignments.filter(a=>a.grade===g&&a.section===s&&(!$("tt-dayf").value||a.day===$("tt-dayf").value)).sort(asgSort);
+ $("tt-table").innerHTML=list.length?tableWrap(["Day","Time","Class","Subject","Teacher","Actions"],list.map(a=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${a.day}</td><td class="p-3 sm:p-4 whitespace-nowrap font-semibold">${fmtT(a)}</td><td class="p-3 sm:p-4">${pill(classLabel(a.grade,a.section))}</td><td class="p-3 sm:p-4 font-semibold">${esc(a.subject)}</td><td class="p-3 sm:p-4">${esc(tName(a.teacherId))}</td><td class="p-3 sm:p-4 text-right whitespace-nowrap space-x-2">${iconBtn(`editAssignment('${a.id}')`,"edit")}${iconBtn(`deleteAssignment('${a.id}')`,"trash-2",true)}</td></tr>`).join(""),700)
+  :`<div class="${CARD}">${empty("No assignments for this class yet. Use the form above to create one.","calendar-x")}</div>`;
+ icons();
+}
+
+/* ================= ATTENDANCE ================= */
+let attMode="teacher",attDate=new Date().toISOString().split("T")[0],attDraft={};
+function renderAttendance(){
+ const u=me(),v=$("view-attendance");
+ if(u.role==="Student"){
+  const recs=Object.keys(appData.attendance).filter(d=>appData.attendance[d][u.id]).sort().reverse();
+  const pct=attPct(appData.attendance,u.id);
+  v.innerHTML=`<div class="${CARD} p-5 flex items-center gap-4"><div class="w-14 h-14 bg-blueTint text-royalBlue rounded-2xl flex items-center justify-center"><i data-lucide="calendar-check" class="w-7 h-7"></i></div><div><p class="text-xs font-bold text-slate-400 uppercase">My Attendance</p><h3 class="text-2xl font-bold font-poppins text-royalBlue">${pct!==null?pct+"%":"No data"}</h3></div></div>
+  ${recs.length?tableWrap(["Date","Status"],recs.map(d=>{const s=appData.attendance[d][u.id];return `<tr><td class="p-3 sm:p-4 font-semibold">${d}</td><td class="p-3 sm:p-4">${statusBadge(s)}</td></tr>`}).join(""),320):`<div class="${CARD}">${empty("No attendance records yet.","calendar-x")}</div>`}`;
+  icons();return;
+ }
+ if(u.role==="Teacher")attMode="student";
+ attDraft={};
+ const isAdmin=u.role==="Admin";
+ v.innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4">
+  <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+   <div><h2 id="att-title" class="text-lg font-bold font-poppins text-royalBlue"></h2><p id="att-sub" class="text-xs text-slate-500"></p></div>
+   <div class="flex flex-col sm:flex-row gap-2 w-full lg:w-auto"><input type="date" id="attendance-date" value="${attDate}" onchange="onAttDate(this.value)" class="${INP} sm:w-auto">
+   <button id="att-save-btn" onclick="saveAtt()" class="${BTN}"><i data-lucide="save" class="w-5 h-5"></i>Save Register</button></div></div>
+  ${isAdmin?`<div class="inline-flex rounded-xl bg-blueTint p-1 border border-blueBorder gap-1 self-start"><button id="tab-teacher" onclick="setAttMode('teacher')" class="px-4 py-2 rounded-lg text-xs font-bold">Teacher Attendance</button><button id="tab-student" onclick="setAttMode('student')" class="px-4 py-2 rounded-lg text-xs font-bold">Student Attendance</button></div>`:""}
+  <div id="att-note" class="p-3 rounded-xl bg-blueSoft border border-blueBorder text-xs text-royalBlue font-semibold"></div></div>
+  <div id="att-body" class="space-y-4"></div>`;
+ renderAttBody();
+}
+function setAttMode(m){attMode=m;attDraft={};renderAttBody()}
+function onAttDate(v){attDate=v;attDraft={};renderAttBody()}
+const statusBadge=s=>`<span class="px-3 py-1 rounded-full text-xs font-bold text-white ${s==="Present"?"bg-royalBlue":s==="Absent"?"bg-red-500":"bg-amber-500"}">${s}</span>`;
+function attList(){
+ const u=me();
+ if(attMode==="teacher")return {list:appData.teachers,store:appData.teacherAttendance};
+ return {list:u.role==="Teacher"?teacherStudents(u):appData.students,store:appData.attendance};
+}
+// Rules: no default status. Teacher marks students once, then it is locked for the teacher.
+// Admin marks teachers, can edit saved teacher + student records, but cannot mark students.
+function renderAttBody(){
+ const role=me().role,isT=attMode==="teacher",{list,store}=attList();
+ $("att-title").innerText=isT?"Teacher Attendance Register":"Student Attendance Register";
+ $("att-sub").innerText=isT?"Administrator marks teacher attendance and can edit it later.":(role==="Teacher"?"Only students of your classes are shown.":"Attendance entered by teachers. You can edit saved records.");
+ $("att-note").innerText=role==="Teacher"?"P = Present, A = Absent, L = Leave. Once you save, you cannot edit it. Only the administrator can edit it.":isT?"P = Present, A = Absent, L = Leave. After saving, you can still edit teacher attendance.":"Teachers mark student attendance. You can edit saved records here, but you cannot mark new ones.";
+ if($("tab-teacher")){["teacher","student"].forEach(m=>$("tab-"+m).className=`px-4 py-2 rounded-lg text-xs font-bold transition-all ${attMode===m?"bg-royalBlue text-white shadow-sm":"text-slate-600 hover:text-royalBlue"}`)}
+ $("att-save-btn").classList.toggle("hidden",role==="Admin"&&!isT);
+ if(!list.length){$("att-body").innerHTML=`<div class="${CARD}">${empty(isT?"No teachers found. Add teachers in Teacher Management.":role==="Teacher"?"No students found. You have no assigned or class-teacher classes yet.":"No students found.","users")}</div>`;icons();return}
+ const day=store[attDate]||{};
+ const btn=(id,cur,s,lbl,on)=>`<button type="button" title="${s}" onclick="setAtt('${id}','${s}')" class="w-10 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${cur===s?on+" text-white shadow-sm":"text-slate-600 hover:text-royalBlue"}">${lbl}</button>`;
+ const rows=list.map(p=>{
+  const rec=day[p.id],cur=rec||attDraft[p.id]||null,pct=attPct(store,p.id);
+  let ctl;
+  if(role==="Teacher"&&rec)ctl=`${statusBadge(rec)} <i data-lucide="lock" class="inline w-4 h-4 text-slate-400"></i>`;
+  else if(role==="Admin"&&!isT&&!rec)ctl=`<span class="text-xs italic text-slate-400">Not marked by teacher</span>`;
+  else ctl=`<div class="inline-flex rounded-xl bg-blueTint p-1 border border-blueBorder gap-1">${btn(p.id,cur,"Present","P","bg-royalBlue")}${btn(p.id,cur,"Absent","A","bg-red-500")}${btn(p.id,cur,"Leave","L","bg-amber-500")}</div>`;
+  return `<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(p.id)}</td><td class="p-3 sm:p-4 font-semibold">${esc(p.name)}</td>
+  <td class="p-3 sm:p-4">${isT?(pct!==null?pct+"%":"—"):pill(classLabel(p.grade,p.section||"A"))}</td><td class="p-3 sm:p-4 text-center">${ctl}</td></tr>`}).join("");
+ const cnt={Present:[],Absent:[],Leave:[],None:[]};list.forEach(p=>cnt[day[p.id]||"None"].push(p));
+ const col=(k,c,ic,lbl)=>`<div class="bg-${c}-50/60 p-4 rounded-2xl border border-${c}-200 space-y-2"><div class="flex items-center justify-between"><h4 class="font-bold text-xs uppercase text-${c}-700 flex items-center gap-1.5"><i data-lucide="${ic}" class="w-4 h-4"></i>${lbl}</h4><span class="px-2 py-0.5 bg-${c}-600 text-white font-bold text-xs rounded-full">${cnt[k].length}</span></div>${cnt[k].length?cnt[k].map(p=>`<div class="p-2 bg-white rounded-lg border border-${c}-200 text-xs font-semibold flex justify-between gap-2"><span class="truncate">${esc(p.name)}</span><span class="text-[10px] font-bold">${esc(p.id)}</span></div>`).join(""):`<p class="text-[11px] text-slate-400 italic">None</p>`}</div>`;
+ $("att-body").innerHTML=tableWrap(["ID",isT?"Teacher Name":"Student Name",isT?"Overall %":"Class","Status (P / A / L)"],rows,620)+`<div class="${CARD} p-4 sm:p-6"><h3 class="font-bold font-poppins text-royalBlue text-sm mb-3">Saved summary for ${attDate}</h3><div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">${col("Present","green","check-circle","Present")}${col("Absent","red","x-circle","Absent")}${col("Leave","amber","clock","Leave")}${col("None","slate","minus-circle","Not marked")}</div></div>`;
+ icons();
+}
+function setAtt(id,status){
+ const role=me().role,{store}=attList(),has=store[attDate]&&store[attDate][id];
+ if(has){
+  if(role==="Teacher")return showToast("Already saved. Only the administrator can edit it.","error");
+  store[attDate][id]=status;saveData();showToast("Attendance updated");
+ }else{
+  if(role==="Admin"&&attMode==="student")return;
+  attDraft[id]=status;
+ }
+ renderAttBody();
+}
+function saveAtt(){
+ const role=me().role,{list,store}=attList(),d=store[attDate]||{},pend=list.filter(p=>!d[p.id]);
+ if(!pend.length)return showToast(role==="Teacher"?"This register is already saved and locked.":"All records are already saved. Use P / A / L to edit.","error");
+ const miss=pend.filter(p=>!attDraft[p.id]);
+ if(miss.length)return showToast(`Please mark everyone first (${miss.length} remaining).`,"error");
+ if(role==="Teacher"&&!confirm("After saving you cannot edit this attendance. Only the administrator can. Save now?"))return;
+ const t=store[attDate]=store[attDate]||{};pend.forEach(p=>t[p.id]=attDraft[p.id]);
+ attDraft={};saveData();renderAttBody();showToast("Attendance saved successfully!");
+}
+
+/* ================= MARKS & RESULTS ================= */
+function marksForRole(){
+ const u=me();
+ if(u.role==="Student")return appData.marks.filter(m=>m.studentId===u.id);
+ if(u.role==="Teacher"){const ids=new Set(teacherStudents(u).map(s=>s.id));return appData.marks.filter(m=>ids.has(m.studentId))}
+ return appData.marks;
+}
+function renderMarks(){
+ const u=me(),v=$("view-marks");
+ if(u.role==="Student"){
+  const my=marksForRole(),ob=my.reduce((a,m)=>a+m.obtained,0),tt=my.reduce((a,m)=>a+m.total,0),rp=tt?Math.round(ob/tt*100):null;
+  v.innerHTML=`<div class="${CARD} p-5 flex items-center gap-4"><div class="w-14 h-14 bg-blueTint text-royalBlue rounded-2xl flex items-center justify-center"><i data-lucide="award" class="w-7 h-7"></i></div><div><p class="text-xs font-bold text-slate-400 uppercase">Overall Result</p><h3 class="text-2xl font-bold font-poppins text-royalBlue">${rp!==null?rp+"% ("+gradeOf(rp)+")":"No results yet"}</h3></div></div>
+  ${my.length?tableWrap(["Subject","Exam","Obtained","Maximum","Percentage","Grade"],my.map(m=>markCells(m,false)).join(""),620):`<div class="${CARD}">${empty("No results published yet.","award")}</div>`}`;
+  icons();return;
+ }
+ const all=marksForRole(),exams=[...new Set(all.map(m=>m.examTitle))],subs=[...new Set(all.map(m=>m.subject))];
+ v.innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4"><div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+  <div><h2 class="text-lg font-bold font-poppins text-royalBlue">Examination & Marks Management</h2><p class="text-xs text-slate-500">Results are grouped class by class.</p></div>
+  <button onclick="openMarkModal()" class="${BTN}"><i data-lucide="plus-circle" class="w-5 h-5"></i>Add Exam Result</button></div>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-3"><input id="mk-search" oninput="renderMarksBody()" placeholder="Search student name or ID..." class="${INP}">
+  <select id="mk-exam" onchange="renderMarksBody()" class="${INP}"><option value="">All examinations</option>${exams.map(x=>`<option>${esc(x)}</option>`).join("")}</select>
+  <select id="mk-sub" onchange="renderMarksBody()" class="${INP}"><option value="">All subjects</option>${subs.map(x=>`<option>${esc(x)}</option>`).join("")}</select></div></div><div id="mk-body" class="space-y-6"></div>`;
+ renderMarksBody();
+}
+function markCells(m,withStudent){
+ const st=appData.students.find(s=>s.id===m.studentId)||{name:"Unknown"};
+ const p=m.total?Math.round(m.obtained/m.total*100):0;
+ const g=`<span class="px-3 py-1 rounded-full text-xs font-bold text-white ${p>=50?"bg-royalBlue":"bg-red-500"}">${gradeOf(p)}</span>`;
+ const isAdminT=me().role!=="Student";
+ return withStudent?`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(m.studentId)}</td><td class="p-3 sm:p-4 font-semibold">${esc(st.name)}</td><td class="p-3 sm:p-4">${esc(m.subject)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(m.examTitle)}</td><td class="p-3 sm:p-4 text-right font-semibold">${m.obtained}</td><td class="p-3 sm:p-4 text-right">${m.total}</td><td class="p-3 sm:p-4 text-right font-bold text-royalBlue">${p}%</td><td class="p-3 sm:p-4">${g}</td><td class="p-3 sm:p-4 text-right">${iconBtn(`deleteMark(${m.id})`,"trash-2",true)}</td></tr>`
+  :`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-semibold">${esc(m.subject)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(m.examTitle)}</td><td class="p-3 sm:p-4 font-semibold">${m.obtained}</td><td class="p-3 sm:p-4">${m.total}</td><td class="p-3 sm:p-4 font-bold text-royalBlue">${p}%</td><td class="p-3 sm:p-4">${g}</td></tr>`;
+}
+function renderMarksBody(){
+ const q=$("mk-search").value.toLowerCase(),ex=$("mk-exam").value,sb=$("mk-sub").value;
+ const groups={};
+ marksForRole().forEach(m=>{
+  const s=appData.students.find(x=>x.id===m.studentId);if(!s)return;
+  if(q&&!(s.name.toLowerCase().includes(q)||s.id.toLowerCase().includes(q)))return;
+  if(ex&&m.examTitle!==ex)return;if(sb&&m.subject!==sb)return;
+  (groups[keyOf(s.grade,s.section||"A")]=groups[keyOf(s.grade,s.section||"A")]||[]).push(m);
+ });
+ const keys=sortKeys(Object.keys(groups));
+ $("mk-body").innerHTML=keys.length?keys.map(k=>`<div class="space-y-2"><h3 class="font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="graduation-cap" class="w-5 h-5"></i>${labelOfKey(k)} — Marks & Results</h3>
+  ${tableWrap(["Student ID","Student Name","Subject","Exam","Obtained Marks","Maximum Marks","Percentage","Grade","Actions"],groups[k].map(m=>markCells(m,true)).join(""),900)}</div>`).join("")
+  :`<div class="${CARD}">${empty("No result records match the current filters.","award")}</div>`;
+ icons();
+}
+function openMarkModal(){
+ const u=me(),studs=u.role==="Teacher"?teacherStudents(u):appData.students;
+ if(!studs.length)return showToast("No students available.","error");
+ openModal(modalHead("Add Exam Result")+`<form onsubmit="saveMark(event)" class="p-5 sm:p-6 space-y-4">
+  <div><label class="${LBL}">Student</label><select id="m-mark-student" onchange="fillMarkSubjects()" class="${INP}">${studs.map(s=>`<option value="${s.id}">${esc(s.name)} (${classLabel(s.grade,s.section||"A")})</option>`).join("")}</select></div>
+  <div><label class="${LBL}">Subject</label><select id="m-mark-subject" class="${INP}"></select></div>
+  <div><label class="${LBL}">Exam Title</label><input id="m-mark-title" required placeholder="e.g. Mid-Term" class="${INP}"></div>
+  <div class="grid grid-cols-2 gap-4"><div><label class="${LBL}">Obtained</label><input type="number" id="m-mark-obt" required min="0" class="${INP}"></div><div><label class="${LBL}">Maximum</label><input type="number" id="m-mark-tot" required min="1" value="50" class="${INP}"></div></div>
+  <button class="${BTN} w-full">Save Exam Result</button></form>`);
+ fillMarkSubjects();
+}
+function fillMarkSubjects(){
+ const u=me(),s=appData.students.find(x=>x.id===$("m-mark-student").value);
+ let subs=appData.subjectsCatalog[s.grade]||[];
+ if(u.role==="Teacher"){const mine=new Set(teacherAsg(u.id).filter(a=>a.grade===s.grade).map(a=>a.subject));(u.assignedSubjects||[]).forEach(x=>mine.add(x));const f=subs.filter(x=>mine.has(x));if(f.length)subs=f}
+ $("m-mark-subject").innerHTML=subs.map(x=>`<option>${esc(x)}</option>`).join("");
+}
+function saveMark(e){
+ e.preventDefault();
+ const obtained=parseFloat($("m-mark-obt").value),total=parseFloat($("m-mark-tot").value);
+ if(obtained>total)return showToast("Obtained marks cannot exceed maximum marks.","error");
+ appData.marks.push({id:Date.now(),studentId:$("m-mark-student").value,subject:$("m-mark-subject").value,examTitle:$("m-mark-title").value.trim(),obtained,total});
+ saveData();closeModal();renderMarks();showToast("Exam result recorded successfully!");
+}
+function deleteMark(id){if(!confirm("Delete this result record?"))return;appData.marks=appData.marks.filter(m=>m.id!==id);saveData();renderMarksBody();showToast("Exam record removed","error")}
+
+/* ================= ACCOUNTS ================= */
+function renderAccounts(){
+ $("view-accounts").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4"><div class="border-b border-blueBorder pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+  <div><h2 class="text-xl font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="key" class="w-6 h-6"></i>Account Management Portal</h2><p class="text-xs text-slate-500 mt-1">Create and manage login credentials for students and teachers.</p></div>
+  <button onclick="openAccountModal()" class="${BTN}"><i data-lucide="user-plus" class="w-5 h-5"></i>Create Login Account</button></div>
+  ${tableWrap(["User ID","Full Name","Role","Email","Status","Actions"],appData.accounts.map(a=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(a.recordId)}</td><td class="p-3 sm:p-4 font-semibold">${esc(a.name)}</td><td class="p-3 sm:p-4">${pill(a.role)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(a.email)}</td><td class="p-3 sm:p-4"><span class="px-3 py-1 bg-green-100 text-green-700 font-bold text-xs rounded-full">${a.status}</span></td><td class="p-3 sm:p-4 text-right">${iconBtn(`deleteAccount('${a.id}')`,"trash-2",true)}</td></tr>`).join(""),700)}</div>`;
+ icons();
+}
+function openAccountModal(){
+ openModal(modalHead("Create Login Account")+`<form onsubmit="saveAccount(event)" class="p-5 sm:p-6 space-y-4">
+  <div><label class="${LBL}">Account Type</label><select id="m-acc-role" onchange="updateAccPeople()" class="${INP}"><option>Student</option><option>Teacher</option></select></div>
+  <div><label class="${LBL}">Person</label><select id="m-acc-person" class="${INP}"></select></div>
+  <div><label class="${LBL}">Login Email</label><input type="email" id="m-acc-email" required class="${INP}"></div>
+  <div><label class="${LBL}">Initial Password</label><input type="password" id="m-acc-pass" required class="${INP}"></div>
+  <button class="${BTN} w-full">Create Account</button></form>`);
+ updateAccPeople();
+}
+function updateAccPeople(){
+ const r=$("m-acc-role").value;
+ $("m-acc-person").innerHTML=r==="Student"?appData.students.map(s=>`<option value="${s.id}">${esc(s.name)} (${s.id} - ${classLabel(s.grade,s.section||"A")})</option>`).join(""):appData.teachers.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.id})</option>`).join("");
+}
+async function api(body){
+ const{data:{session}}=await sb.auth.getSession();
+ const r=await fetch("/api/manage-user",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+session.access_token},body:JSON.stringify(body)});
+ const txt=await r.text();let j={};try{j=JSON.parse(txt)}catch(e){}
+ if(!r.ok){const e=new Error(j.error||`Server error ${r.status}: ${txt.slice(0,150)}`);e.status=r.status;throw e}
+ return j;
+}
+// Uses the Vercel function; if the site has no /api (404) it uses the database function instead.
+async function manageUser(body){
+ try{return await api(body)}
+ catch(err){
+  if(err.status!==404)throw err;
+  const create=body.action==="create";
+  const{error}=await sb.rpc(create?"admin_create_user":"admin_delete_user",create?{p_role:body.role,p_record_id:body.recordId,p_password:body.password}:{p_role:body.role,p_record_id:body.recordId});
+  if(error)throw new Error(error.message);
+  return{ok:true};
+ }
+}
+async function saveAccount(e){
+ e.preventDefault();
+ const role=$("m-acc-role").value,recordId=$("m-acc-person").value,email=$("m-acc-email").value.trim().toLowerCase(),password=$("m-acc-pass").value;
+ if(appData.accounts.some(a=>a.email===email))return showToast("Email already linked to an account.","error");
+ if(appData.accounts.some(a=>a.recordId===recordId))return showToast("An account already exists for this person.","error");
+ if(password.length<6)return showToast("Password must be at least 6 characters.","error");
+ const rec=(role==="Student"?appData.students:appData.teachers).find(x=>x.id===recordId);if(!rec)return;
+ try{await manageUser({action:"create",role,recordId,password})}catch(err){return showToast(err.message,"error")}
+ appData.accounts.push({id:"ACC-"+Date.now(),recordId,name:rec.name,role,email,status:"Active"});
+ saveData();closeModal();renderAccounts();showToast(`Account created. Login ID: ${recordId}`);
+}
+async function dropAccountFor(recordId,role){
+ const a=appData.accounts.find(x=>x.recordId===recordId&&x.role===role);if(!a)return;
+ try{await manageUser({action:"delete",role,recordId});appData.accounts=appData.accounts.filter(x=>x!==a)}
+ catch(e){showToast("Login account not removed: "+e.message,"error")}
+}
+async function deleteAccount(id){
+ const a=appData.accounts.find(x=>x.id===id);if(!a)return;
+ if(a.role==="Admin")return showToast("The administrator account cannot be deleted here.","error");
+ if(!confirm("Delete this login account?"))return;
+ try{await manageUser({action:"delete",role:a.role,recordId:a.recordId})}catch(err){return showToast(err.message,"error")}
+ appData.accounts=appData.accounts.filter(x=>x.id!==id);saveData();renderAccounts();showToast("Account deleted","error");
+}
+
+/* ================= REPORTS ================= */
+function renderReports(){
+ $("view-reports").innerHTML=`<div class="${CARD} p-4 sm:p-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4"><div><h2 class="text-lg font-bold font-poppins text-royalBlue">Institutional Reports & Analytics</h2><p class="text-xs text-slate-500">Print or export official student records.</p></div>
+  <div class="flex flex-col sm:flex-row gap-3"><button onclick="window.print()" class="${BTN}"><i data-lucide="printer" class="w-5 h-5"></i>Print Report</button><button onclick="exportCSV()" class="px-5 py-2.5 bg-white text-royalBlue border border-blueBorder hover:bg-blueTint font-bold rounded-xl text-sm flex items-center justify-center gap-2"><i data-lucide="download" class="w-5 h-5"></i>Export CSV</button></div></div>
+  <div class="${CARD} p-4 sm:p-8 space-y-6"><div class="text-center border-b border-blueBorder pb-6"><h2 class="text-xl sm:text-2xl font-bold font-poppins text-royalBlue">${esc(appData.settings.schoolName)} - Official Summary</h2><p class="text-xs text-slate-500 mt-1">Generated by ${esc(me().name)}</p></div>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">${[["Students",appData.students.length],["Teachers",appData.teachers.length],["Login Accounts",appData.accounts.length],["Exam Records",appData.marks.length]].map(x=>`<div class="p-4 bg-blueTint rounded-2xl border border-blueBorder text-center"><p class="text-xs font-bold text-slate-400 uppercase">${x[0]}</p><h3 class="text-xl font-bold font-poppins text-royalBlue mt-1">${x[1]}</h3></div>`).join("")}</div></div>`;
+ icons();
+}
+function exportCSV(){
+ let csv="ID,Name,Father Name,CNIC,Grade,Section\n";
+ appData.students.forEach(s=>{csv+=`"${s.id}","${s.name}","${s.fatherName}","${s.cnic}","${s.grade}","${s.section||"A"}"\n`});
+ const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="SmartSchool_Students_Report.csv";a.click();showToast("CSV report exported!");
+}
+
+/* ================= MODAL ================= */
+function openModal(html){const b=$("modal-backdrop"),x=$("modal-box");x.innerHTML=html;b.classList.remove("hidden");setTimeout(()=>x.classList.remove("scale-95","opacity-0"),30);icons()}
+function closeModal(){const b=$("modal-backdrop"),x=$("modal-box");x.classList.add("scale-95","opacity-0");setTimeout(()=>b.classList.add("hidden"),200)}
+$("modal-backdrop").addEventListener("click",e=>{if(e.target.id==="modal-backdrop")closeModal()});
+
+window.addEventListener("DOMContentLoaded",async()=>{
+ icons();
+ if(!sb){showToast("Database not configured. Edit config.js first.","error");return}
+ const{data:{session}}=await sb.auth.getSession();
+ if(session){try{await startSession(session.user)}catch(e){await sb.auth.signOut();showToast(e.message,"error")}}
+});
+</script>
+</body>
+</html>
