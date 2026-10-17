@@ -1,3 +1,4 @@
+html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -127,10 +128,7 @@ let appData={currentUser:null,settings:{schoolName:SCHOOL_NAME},students:[],teac
  }
 };
 
-/* ---------- DATABASE LAYER (Supabase) ----------
-   The screens keep using appData. saveData() compares appData with the last
-   copy from the server and sends only the changes. The database security
-   rules (RLS) decide what each role is really allowed to change. */
+/* ---------- DATABASE LAYER (Supabase) ---------- */
 const M={
  students:{to:s=>({id:s.id,name:s.name,father_name:s.fatherName,cnic:s.cnic,grade:s.grade,section:s.section||"A",photo:s.photo||null}),from:r=>({id:r.id,name:r.name,fatherName:r.father_name||"",cnic:r.cnic||"",grade:r.grade,section:r.section||"A",photo:r.photo||""})},
  teachers:{to:t=>({id:t.id,name:t.name,father_name:t.fatherName||"",cnic:t.cnic||"",assigned_subjects:t.assignedSubjects||[],class_teacher_of:t.classTeacherOf||""}),from:r=>({id:r.id,name:r.name,fatherName:r.father_name||"",cnic:r.cnic||"",assignedSubjects:r.assigned_subjects||[],classTeacherOf:r.class_teacher_of||""})},
@@ -141,7 +139,7 @@ const M={
 };
 const attRows=(o,col)=>{const out=[];for(const d in o)for(const id in o[d])out.push({date:d,[col]:id,status:o[d][id]});return out};
 const attNest=(rows,col)=>{const o={};rows.forEach(r=>{(o[r.date]=o[r.date]||{})[r[col]]=r.status});return o};
-// w = roles allowed to write this table (the database enforces it too)
+
 const SYNC=[
  {n:"students",t:"students",pk:["id"],w:["Admin"],rows:()=>appData.students.map(M.students.to)},
  {n:"teachers",t:"teachers",pk:["id"],w:["Admin"],rows:()=>appData.teachers.map(M.teachers.to)},
@@ -228,7 +226,6 @@ const sortKeys=ks=>ks.sort((a,b)=>{const[g1,s1]=a.split("|"),[g2,s2]=b.split("|"
 const allClassKeys=()=>{const set=new Set();appData.students.forEach(s=>set.add(keyOf(s.grade,s.section||"A")));appData.assignments.forEach(a=>set.add(keyOf(a.grade,a.section)));return sortKeys([...set])};
 const asgSort=(a,b)=>DAYS.indexOf(a.day)-DAYS.indexOf(b.day)||toMin(a.start)-toMin(b.start);
 const teacherAsg=id=>appData.assignments.filter(a=>a.teacherId===id).sort(asgSort);
-// Grades a teacher is connected to: from saved assignments + legacy class-teacher value (kept, not deleted)
 const teacherGrades=t=>{const s=new Set(teacherAsg(t.id).map(a=>a.grade));if(t.classTeacherOf)s.add(t.classTeacherOf);return s};
 const teacherStudents=t=>{const ks=new Set(teacherAsg(t.id).map(a=>keyOf(a.grade,a.section)));return appData.students.filter(s=>ks.has(keyOf(s.grade,s.section||"A"))||(t.classTeacherOf&&s.grade===t.classTeacherOf))};
 const attPct=(store,id)=>{let p=0,t=0;for(const d in store){const s=store[d][id];if(s){t++;if(s==="Present")p++}}return t?Math.round(p/t*100):null};
@@ -402,7 +399,6 @@ function renderStudentDashboard(u,v){
     ${subs.length?subs.map(s=>`<div class="p-3 bg-blueTint rounded-xl border border-blueBorder flex items-center justify-between gap-2 text-xs"><span class="font-bold text-royalBlue">${esc(s.subject)}</span><span class="text-slate-600 font-semibold text-right">${esc(s.teacher)}</span></div>`).join(""):empty("No subjects found for your class.")}</div>
    <div class="${CARD} p-5 space-y-3"><h3 class="font-bold font-poppins text-royalBlue flex items-center gap-2 border-b border-blueBorder pb-3"><i data-lucide="bell" class="w-5 h-5"></i>Announcements</h3>${annCards(3,true)}</div></div>`;
 }
-// subjects for a student's class + teacher from saved assignments
 function subjectRows(s){
  const sec=s.section||"A",names=new Set(appData.subjectsCatalog[s.grade]||[]);
  appData.assignments.filter(a=>a.grade===s.grade&&a.section===sec).forEach(a=>names.add(a.subject));
@@ -437,7 +433,7 @@ function renderStudentSubjects(){
  <div class="p-3 bg-white rounded-xl border border-blueBorder flex items-center gap-3"><div class="w-9 h-9 bg-blueTint text-royalBlue rounded-lg flex items-center justify-center flex-shrink-0"><i data-lucide="user-check" class="w-4 h-4"></i></div><div class="min-w-0"><span class="text-[10px] text-slate-400 font-bold uppercase block">Assigned Teacher</span><span class="text-xs font-bold text-slate-800 block break-words">${esc(r.teacher)}</span></div></div></div>`).join("")}</div></div>`;
 }
 
-/* ================= TEACHER: MY CLASSES & SUBJECTS (timetable only) ================= */
+/* ================= TEACHER: MY CLASSES & SUBJECTS ================= */
 function renderMyClasses(){
  const u=me(),asg=teacherAsg(u.id);
  const keys=sortKeys([...new Set(asg.map(a=>keyOf(a.grade,a.section)))]);
@@ -489,11 +485,13 @@ function saveStudent(e,oldId,isEdit){
  const rec={id:$("m-std-id").value.trim(),name:$("m-std-name").value.trim(),fatherName:$("m-std-fname").value.trim(),cnic:$("m-std-cnic").value.trim(),grade:$("m-std-grade").value,section:$("m-std-sec").value};
  if(isEdit){const i=appData.students.findIndex(s=>s.id===oldId);if(i>-1)appData.students[i]={...appData.students[i],...rec,id:oldId}}
  else{if(appData.students.some(s=>s.id===rec.id))return showToast("Student ID already exists.","error");appData.students.push(rec)}
- saveData();closeModal();renderStudentRows();showToast("Student record saved successfully!");
+ saveData();closeModal();renderStudentRows();
+ if(curView==="accounts") renderAccounts();
+ showToast("Student record saved successfully!");
 }
 async function deleteStudent(id){if(!confirm("Delete this student record?"))return;await dropAccountFor(id,"Student");appData.students=appData.students.filter(s=>s.id!==id);saveData();renderStudentRows();showToast("Student deleted","error")}
 
-/* ================= TEACHERS (profile only, no class assignment) ================= */
+/* ================= TEACHERS ================= */
 function renderTeachers(){
  $("view-teachers").innerHTML=`<div class="${CARD} p-4 sm:p-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
   <div class="w-full md:w-96 relative"><i data-lucide="search" class="w-5 h-5 text-royalBlue absolute left-4 top-3"></i><input id="teacher-search" oninput="renderTeacherRows()" placeholder="Search teachers by name or ID..." class="${INP} pl-12"></div>
@@ -520,9 +518,11 @@ function saveTeacher(e,oldId,isEdit){
  e.preventDefault();
  const rec={name:$("m-tch-name").value.trim(),fatherName:$("m-tch-fname").value.trim(),cnic:$("m-tch-cnic").value.trim()};
  const id=$("m-tch-id").value.trim();
- if(isEdit){const i=appData.teachers.findIndex(t=>t.id===oldId);if(i>-1)appData.teachers[i]={...appData.teachers[i],...rec}} // old class data preserved
+ if(isEdit){const i=appData.teachers.findIndex(t=>t.id===oldId);if(i>-1)appData.teachers[i]={...appData.teachers[i],...rec}}
  else{if(appData.teachers.some(t=>t.id===id))return showToast("Teacher ID already exists.","error");appData.teachers.push({id,...rec,assignedSubjects:[],classTeacherOf:""})}
- saveData();closeModal();renderTeacherRows();showToast("Teacher record saved successfully!");
+ saveData();closeModal();renderTeacherRows();
+ if(curView==="accounts") renderAccounts();
+ showToast("Teacher record saved successfully!");
 }
 async function deleteTeacher(id){
  const n=appData.assignments.filter(a=>a.teacherId===id).length;
@@ -531,7 +531,7 @@ async function deleteTeacher(id){
  saveData();renderTeacherRows();showToast("Teacher deleted","error");
 }
 
-/* ================= TIMETABLE & SUBJECT ASSIGNMENT (ADMIN) ================= */
+/* ================= TIMETABLE & SUBJECT ASSIGNMENT ================= */
 let ttEditId=null;
 function renderTimetable(){
  ttEditId=null;
@@ -632,8 +632,6 @@ function attList(){
  if(attMode==="teacher")return {list:appData.teachers,store:appData.teacherAttendance};
  return {list:u.role==="Teacher"?teacherStudents(u):appData.students,store:appData.attendance};
 }
-// Rules: no default status. Teacher marks students once, then it is locked for the teacher.
-// Admin marks teachers, can edit saved teacher + student records, but cannot mark students.
 function renderAttBody(){
  const role=me().role,isT=attMode==="teacher",{list,store}=attList();
  $("att-title").innerText=isT?"Teacher Attendance Register":"Student Attendance Register";
@@ -706,7 +704,6 @@ function markCells(m,withStudent){
  const st=appData.students.find(s=>s.id===m.studentId)||{name:"Unknown"};
  const p=m.total?Math.round(m.obtained/m.total*100):0;
  const g=`<span class="px-3 py-1 rounded-full text-xs font-bold text-white ${p>=50?"bg-royalBlue":"bg-red-500"}">${gradeOf(p)}</span>`;
- const isAdminT=me().role!=="Student";
  return withStudent?`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(m.studentId)}</td><td class="p-3 sm:p-4 font-semibold">${esc(st.name)}</td><td class="p-3 sm:p-4">${esc(m.subject)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(m.examTitle)}</td><td class="p-3 sm:p-4 text-right font-semibold">${m.obtained}</td><td class="p-3 sm:p-4 text-right">${m.total}</td><td class="p-3 sm:p-4 text-right font-bold text-royalBlue">${p}%</td><td class="p-3 sm:p-4">${g}</td><td class="p-3 sm:p-4 text-right">${iconBtn(`deleteMark(${m.id})`,"trash-2",true)}</td></tr>`
   :`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-semibold">${esc(m.subject)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(m.examTitle)}</td><td class="p-3 sm:p-4 font-semibold">${m.obtained}</td><td class="p-3 sm:p-4">${m.total}</td><td class="p-3 sm:p-4 font-bold text-royalBlue">${p}%</td><td class="p-3 sm:p-4">${g}</td></tr>`;
 }
@@ -752,13 +749,225 @@ function saveMark(e){
 function deleteMark(id){if(!confirm("Delete this result record?"))return;appData.marks=appData.marks.filter(m=>m.id!==id);saveData();renderMarksBody();showToast("Exam record removed","error")}
 
 /* ================= ACCOUNTS ================= */
+let accountSearchQuery = "";
+let accountGradeFilter = "";
+
 function renderAccounts(){
- $("view-accounts").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4"><div class="border-b border-blueBorder pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-  <div><h2 class="text-xl font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="key" class="w-6 h-6"></i>Account Management Portal</h2><p class="text-xs text-slate-500 mt-1">Create and manage login credentials for students and teachers.</p></div>
-  <button onclick="openAccountModal()" class="${BTN}"><i data-lucide="user-plus" class="w-5 h-5"></i>Create Login Account</button></div>
-  ${tableWrap(["User ID","Full Name","Role","Email","Status","Actions"],appData.accounts.map(a=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(a.recordId)}</td><td class="p-3 sm:p-4 font-semibold">${esc(a.name)}</td><td class="p-3 sm:p-4">${pill(a.role)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(a.email)}</td><td class="p-3 sm:p-4"><span class="px-3 py-1 bg-green-100 text-green-700 font-bold text-xs rounded-full">${a.status}</span></td><td class="p-3 sm:p-4 text-right">${iconBtn(`deleteAccount('${a.id}')`,"trash-2",true)}</td></tr>`).join(""),700)}</div>`;
- icons();
+  const searchVal = accountSearchQuery || "";
+  const filterVal = accountGradeFilter || "";
+
+  // Count metrics
+  const totalStudentAccounts = appData.accounts.filter(a => a.role === "Student").length;
+  const totalTeacherAccounts = appData.accounts.filter(a => a.role === "Teacher").length;
+
+  $("view-accounts").innerHTML = `
+    <div class="${CARD} p-4 sm:p-6 space-y-4">
+      <div class="border-b border-blueBorder pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold font-poppins text-royalBlue flex items-center gap-2">
+            <i data-lucide="key" class="w-6 h-6"></i>Account Management Portal
+          </h2>
+          <p class="text-xs text-slate-500 mt-1">
+            Create and manage login credentials organized by grade and role.
+          </p>
+        </div>
+        <button onclick="openAccountModal()" class="${BTN}">
+          <i data-lucide="user-plus" class="w-5 h-5"></i>Create Login Account
+        </button>
+      </div>
+
+      <!-- Controls: Search and Grade Filter -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="sm:col-span-2 relative">
+          <i data-lucide="search" class="w-5 h-5 text-royalBlue absolute left-4 top-3"></i>
+          <input id="acc-search" value="${esc(searchVal)}" oninput="onAccountSearchChange(this.value)" placeholder="Search accounts by ID, name, or email..." class="${INP} pl-12">
+        </div>
+        <div>
+          <select id="acc-grade-filter" onchange="onAccountGradeFilterChange(this.value)" class="${INP}">
+            <option value="">All Grades (Student Tables)</option>
+            ${appData.gradeList.map(g => `<option value="${g}" ${filterVal === g ? "selected" : ""}>${g}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+
+      <!-- Metrics Summary -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="p-4 bg-blueTint rounded-2xl border border-blueBorder flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-royalBlue text-white rounded-xl flex items-center justify-center font-bold">
+              <i data-lucide="users" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <p class="text-xs font-bold text-slate-400 uppercase">Total Student Accounts</p>
+              <h3 class="text-lg font-bold font-poppins text-royalBlue">${totalStudentAccounts}</h3>
+            </div>
+          </div>
+        </div>
+        <div class="p-4 bg-blueTint rounded-2xl border border-blueBorder flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-royalBlue text-white rounded-xl flex items-center justify-center font-bold">
+              <i data-lucide="user-check" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <p class="text-xs font-bold text-slate-400 uppercase">Total Teacher Accounts</p>
+              <h3 class="text-lg font-bold font-poppins text-royalBlue">${totalTeacherAccounts}</h3>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tables Container -->
+    <div id="accounts-tables-container" class="space-y-6"></div>
+  `;
+
+  renderAccountsTables();
+  icons();
 }
+
+function onAccountSearchChange(val) {
+  accountSearchQuery = val;
+  renderAccountsTables();
+}
+
+function onAccountGradeFilterChange(val) {
+  accountGradeFilter = val;
+  renderAccountsTables();
+}
+
+function renderAccountsTables(){
+  const container = $("accounts-tables-container");
+  if(!container) return;
+
+  const q = (accountSearchQuery || "").toLowerCase();
+  const filterGrade = accountGradeFilter || "";
+
+  // Map student accounts with live student data from database
+  const studentAccounts = appData.accounts
+    .filter(a => a.role === "Student")
+    .map(a => {
+      const student = appData.students.find(s => s.id === a.recordId);
+      return {
+        ...a,
+        studentName: student ? student.name : a.name,
+        grade: student ? student.grade : "Unassigned Grade",
+        section: student ? (student.section || "A") : "-"
+      };
+    })
+    .filter(a => {
+      const matchSearch = [a.recordId, a.studentName, a.email, a.grade, a.section].some(x => String(x || "").toLowerCase().includes(q));
+      const matchGrade = !filterGrade || a.grade === filterGrade;
+      return matchSearch && matchGrade;
+    });
+
+  // Filter Teacher accounts
+  const teacherAccounts = appData.accounts
+    .filter(a => a.role === "Teacher")
+    .map(a => {
+      const teacher = appData.teachers.find(t => t.id === a.recordId);
+      return {
+        ...a,
+        teacherName: teacher ? teacher.name : a.name
+      };
+    })
+    .filter(a => {
+      if(filterGrade) return false;
+      return [a.recordId, a.teacherName, a.email].some(x => String(x || "").toLowerCase().includes(q));
+    })
+    .sort((a, b) => String(a.recordId).localeCompare(String(b.recordId), undefined, { numeric: true, sensitivity: 'base' }));
+
+  let html = "";
+
+  // --- A. Student Accounts Tables by Grade ---
+  const gradesToDisplay = filterGrade ? [filterGrade] : appData.gradeList;
+
+  gradesToDisplay.forEach(grade => {
+    const gradeAccounts = studentAccounts
+      .filter(a => a.grade === grade)
+      .sort((a, b) => String(a.recordId).localeCompare(String(b.recordId), undefined, { numeric: true, sensitivity: 'base' }));
+
+    if (gradeAccounts.length > 0) {
+      const rows = gradeAccounts.map(a => `
+        <tr class="hover:bg-blueTint">
+          <td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(a.recordId)}</td>
+          <td class="p-3 sm:p-4 font-semibold">${esc(a.studentName)}</td>
+          <td class="p-3 sm:p-4">${pill(a.grade)}</td>
+          <td class="p-3 sm:p-4 font-semibold text-slate-600">${esc(a.section)}</td>
+          <td class="p-3 sm:p-4 text-slate-600">${esc(a.email)}</td>
+          <td class="p-3 sm:p-4">
+            <span class="px-3 py-1 bg-green-100 text-green-700 font-bold text-xs rounded-full">${esc(a.status || "Active")}</span>
+          </td>
+          <td class="p-3 sm:p-4 text-right">${iconBtn(`deleteAccount('${a.id}')`, "trash-2", true)}</td>
+        </tr>
+      `).join("");
+
+      html += `
+        <div class="${CARD} p-4 sm:p-6 space-y-3">
+          <div class="flex items-center justify-between border-b border-blueBorder pb-3">
+            <h3 class="text-base font-bold font-poppins text-royalBlue flex items-center gap-2">
+              <i data-lucide="graduation-cap" class="w-5 h-5"></i>${esc(grade)} Student Accounts
+            </h3>
+            <span class="px-3 py-1 bg-blueSoft text-royalBlue font-bold text-xs rounded-full">
+              ${gradeAccounts.length} Account${gradeAccounts.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          ${tableWrap(["Student ID", "Student Name", "Grade", "Section", "Login Email", "Account Status", "Actions"], rows, 760)}
+        </div>
+      `;
+    }
+  });
+
+  if (!html && studentAccounts.length === 0) {
+    html += `
+      <div class="${CARD} p-4 sm:p-6">
+        <h3 class="text-base font-bold font-poppins text-royalBlue mb-2">Student Accounts</h3>
+        ${empty("No student accounts found matching the criteria.", "users")}
+      </div>
+    `;
+  }
+
+  // --- B. Teacher Accounts Table ---
+  if (!filterGrade) {
+    if (teacherAccounts.length > 0) {
+      const teacherRows = teacherAccounts.map(a => `
+        <tr class="hover:bg-blueTint">
+          <td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(a.recordId)}</td>
+          <td class="p-3 sm:p-4 font-semibold">${esc(a.teacherName)}</td>
+          <td class="p-3 sm:p-4 text-slate-600">${esc(a.email)}</td>
+          <td class="p-3 sm:p-4">
+            <span class="px-3 py-1 bg-green-100 text-green-700 font-bold text-xs rounded-full">${esc(a.status || "Active")}</span>
+          </td>
+          <td class="p-3 sm:p-4 text-right">${iconBtn(`deleteAccount('${a.id}')`, "trash-2", true)}</td>
+        </tr>
+      `).join("");
+
+      html += `
+        <div class="${CARD} p-4 sm:p-6 space-y-3">
+          <div class="flex items-center justify-between border-b border-blueBorder pb-3">
+            <h3 class="text-base font-bold font-poppins text-royalBlue flex items-center gap-2">
+              <i data-lucide="user-check" class="w-5 h-5"></i>Teacher Accounts
+            </h3>
+            <span class="px-3 py-1 bg-blueSoft text-royalBlue font-bold text-xs rounded-full">
+              ${teacherAccounts.length} Account${teacherAccounts.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          ${tableWrap(["Teacher ID", "Teacher Name", "Login Email", "Account Status", "Actions"], teacherRows, 680)}
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="${CARD} p-4 sm:p-6">
+          <h3 class="text-base font-bold font-poppins text-royalBlue mb-2">Teacher Accounts</h3>
+          ${empty("No teacher accounts found matching the criteria.", "user-x")}
+        </div>
+      `;
+    }
+  }
+
+  container.innerHTML = html;
+  icons();
+}
+
 function openAccountModal(){
  openModal(modalHead("Create Login Account")+`<form onsubmit="saveAccount(event)" class="p-5 sm:p-6 space-y-4">
   <div><label class="${LBL}">Account Type</label><select id="m-acc-role" onchange="updateAccPeople()" class="${INP}"><option>Student</option><option>Teacher</option></select></div>
@@ -784,7 +993,6 @@ async function api(body){
  if(!r.ok){const e=new Error(j.error||`Server error ${r.status}: ${txt.slice(0,150)}`);e.status=r.status;throw e}
  return j;
 }
-// Uses the Vercel function; if the site has no /api (404) it uses the database function instead.
 async function manageUser(body){
  try{return await api(body)}
  catch(err){
