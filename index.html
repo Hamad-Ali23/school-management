@@ -762,15 +762,20 @@ function renderAccounts(){
 function openAccountModal(){
  openModal(modalHead("Create Login Account")+`<form onsubmit="saveAccount(event)" class="p-5 sm:p-6 space-y-4">
   <div><label class="${LBL}">Account Type</label><select id="m-acc-role" onchange="updateAccPeople()" class="${INP}"><option>Student</option><option>Teacher</option></select></div>
-  <div><label class="${LBL}">Person</label><select id="m-acc-person" class="${INP}"></select></div>
-  <div><label class="${LBL}">Login Email</label><input type="email" id="m-acc-email" required class="${INP}"></div>
+  <div><label class="${LBL}">Person</label><select id="m-acc-person" onchange="updateAccEmail()" class="${INP}"></select></div>
+  <div><label class="${LBL}">Login Email</label><input type="email" id="m-acc-email" required readonly class="${INP} bg-slate-100 cursor-not-allowed"><p class="text-xs text-slate-500 mt-1">Created automatically from the ID. The user logs in with this email or just the ID.</p></div>
   <div><label class="${LBL}">Initial Password</label><input type="password" id="m-acc-pass" required class="${INP}"></div>
   <button class="${BTN} w-full">Create Account</button></form>`);
  updateAccPeople();
 }
+function updateAccEmail(){
+ const id=$("m-acc-person").value;
+ $("m-acc-email").value=id?`${String(id).toLowerCase()}@school.local`:"";
+}
 function updateAccPeople(){
  const r=$("m-acc-role").value;
  $("m-acc-person").innerHTML=r==="Student"?appData.students.map(s=>`<option value="${s.id}">${esc(s.name)} (${s.id} - ${classLabel(s.grade,s.section||"A")})</option>`).join(""):appData.teachers.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.id})</option>`).join("");
+ updateAccEmail();
 }
 async function api(body){
  const{data:{session}}=await sb.auth.getSession();
@@ -792,14 +797,14 @@ async function manageUser(body){
 }
 async function saveAccount(e){
  e.preventDefault();
- const role=$("m-acc-role").value,recordId=$("m-acc-person").value,email=$("m-acc-email").value.trim().toLowerCase(),password=$("m-acc-pass").value;
+ const role=$("m-acc-role").value,recordId=$("m-acc-person").value,email=`${String(recordId).toLowerCase()}@school.local`,password=$("m-acc-pass").value;
  if(appData.accounts.some(a=>a.email===email))return showToast("Email already linked to an account.","error");
  if(appData.accounts.some(a=>a.recordId===recordId))return showToast("An account already exists for this person.","error");
  if(password.length<6)return showToast("Password must be at least 6 characters.","error");
  const rec=(role==="Student"?appData.students:appData.teachers).find(x=>x.id===recordId);if(!rec)return;
  try{await manageUser({action:"create",role,recordId,password})}catch(err){return showToast(err.message,"error")}
  appData.accounts.push({id:"ACC-"+Date.now(),recordId,name:rec.name,role,email,status:"Active"});
- saveData();closeModal();renderAccounts();showToast(`Account created. Login ID: ${recordId}`);
+ saveData();closeModal();renderAccounts();showToast(`Account created. Login ID: ${recordId} (${email})`);
 }
 async function dropAccountFor(recordId,role){
  const a=appData.accounts.find(x=>x.recordId===recordId&&x.role===role);if(!a)return;
