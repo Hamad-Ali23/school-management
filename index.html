@@ -1,4 +1,3 @@
-html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -107,7 +106,6 @@ button,select,input{min-height:40px}
 /* ================= DATA ================= */
 const SCHOOL_NAME=(typeof APP_SCHOOL_NAME!=="undefined"&&APP_SCHOOL_NAME)||"My School";
 const SECTIONS=["A","B"];
-const DAYS=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
 const sb=(typeof SUPABASE_URL!=="undefined"&&SUPABASE_URL&&!SUPABASE_URL.includes("YOUR-PROJECT"))?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
 let appData={currentUser:null,settings:{schoolName:SCHOOL_NAME},students:[],teachers:[],accounts:[],announcements:[],attendance:{},teacherAttendance:{},assignments:[],marks:[],
@@ -128,18 +126,21 @@ let appData={currentUser:null,settings:{schoolName:SCHOOL_NAME},students:[],teac
  }
 };
 
-/* ---------- DATABASE LAYER (Supabase) ---------- */
+/* ---------- DATABASE LAYER (Supabase) ----------
+   The screens keep using appData. saveData() compares appData with the last
+   copy from the server and sends only the changes. The database security
+   rules (RLS) decide what each role is really allowed to change. */
 const M={
  students:{to:s=>({id:s.id,name:s.name,father_name:s.fatherName,cnic:s.cnic,grade:s.grade,section:s.section||"A",photo:s.photo||null}),from:r=>({id:r.id,name:r.name,fatherName:r.father_name||"",cnic:r.cnic||"",grade:r.grade,section:r.section||"A",photo:r.photo||""})},
  teachers:{to:t=>({id:t.id,name:t.name,father_name:t.fatherName||"",cnic:t.cnic||"",assigned_subjects:t.assignedSubjects||[],class_teacher_of:t.classTeacherOf||""}),from:r=>({id:r.id,name:r.name,fatherName:r.father_name||"",cnic:r.cnic||"",assignedSubjects:r.assigned_subjects||[],classTeacherOf:r.class_teacher_of||""})},
  accounts:{to:a=>({id:a.id,record_id:a.recordId,name:a.name,role:a.role,email:a.email,status:a.status||"Active"}),from:r=>({id:r.id,recordId:r.record_id,name:r.name,role:r.role,email:r.email,status:r.status})},
  announcements:{to:a=>({id:a.id,title:a.title,date:a.date,content:a.content}),from:r=>({id:r.id,title:r.title,date:r.date,content:r.content})},
- assignments:{to:a=>({id:a.id,grade:a.grade,section:a.section,subject:a.subject,teacher_id:a.teacherId,day:a.day,start_time:a.start,end_time:a.end}),from:r=>({id:r.id,grade:r.grade,section:r.section,subject:r.subject,teacherId:r.teacher_id,day:r.day,start:r.start_time,end:r.end_time})},
+ assignments:{to:a=>({id:a.id,grade:a.grade,section:a.section,subject:a.subject,teacher_id:a.teacherId,day:"",start_time:a.start||"",end_time:a.end||""}),from:r=>({id:r.id,grade:r.grade,section:r.section,subject:r.subject,teacherId:r.teacher_id,start:r.start_time||"",end:r.end_time||""})},
  marks:{to:m=>({id:m.id,student_id:m.studentId,subject:m.subject,exam_title:m.examTitle,obtained:m.obtained,total:m.total}),from:r=>({id:r.id,studentId:r.student_id,subject:r.subject,examTitle:r.exam_title,obtained:Number(r.obtained),total:Number(r.total)})}
 };
 const attRows=(o,col)=>{const out=[];for(const d in o)for(const id in o[d])out.push({date:d,[col]:id,status:o[d][id]});return out};
 const attNest=(rows,col)=>{const o={};rows.forEach(r=>{(o[r.date]=o[r.date]||{})[r[col]]=r.status});return o};
-
+// w = roles allowed to write this table (the database enforces it too)
 const SYNC=[
  {n:"students",t:"students",pk:["id"],w:["Admin"],rows:()=>appData.students.map(M.students.to)},
  {n:"teachers",t:"teachers",pk:["id"],w:["Admin"],rows:()=>appData.teachers.map(M.teachers.to)},
@@ -200,7 +201,7 @@ async function startSession(user,expected){
  if(error||!p)throw new Error("No school profile found for this account. Ask the administrator.");
  if(expected&&p.role!==expected)throw new Error(`This account is not a ${expected}. Please choose the correct role.`);
  appData.currentUser={role:p.role,id:p.record_id,name:p.name};
- await loadRemote();takeSnap();initApp();
+ await loadRemote();takeSnap();if(p.role==="Admin")normalizeAssignments();initApp();
 }
 
 /* ================= HELPERS ================= */
@@ -216,16 +217,19 @@ const gNum=g=>parseInt(String(g).replace(/\D/g,""))||0;
 const classLabel=(g,s)=>`Class ${gNum(g)}-${s}`;
 const keyOf=(g,s)=>`${g}|${s}`;
 const labelOfKey=k=>{const[g,s]=k.split("|");return classLabel(g,s)};
-const toMin=t=>{const[h,m]=t.split(":").map(Number);return h*60+m};
-const fmtT=a=>`${a.start}–${a.end}`;
+const toMin=t=>{const[h,m]=String(t).split(":").map(Number);return h*60+m};
+const fmt12=t=>{if(!t)return"";let[h,m]=t.split(":").map(Number);const ap=h>=12?"PM":"AM";h=h%12||12;return `${h}:${String(m).padStart(2,"0")} ${ap}`};
+const fmtT=a=>a&&a.start&&a.end?`${fmt12(a.start)} – ${fmt12(a.end)}`:"";
+const normSub=x=>String(x||"").trim().toLowerCase().replace(/\s+/g," ");
 const gradeOf=p=>p>=80?"A+":p>=70?"A":p>=60?"B":p>=50?"C":"F";
 const tName=id=>(appData.teachers.find(t=>t.id===id)||{name:"Unknown"}).name;
 const me=()=>{const u=appData.currentUser;if(!u)return null;if(u.role==="Admin")return u;
  const r=(u.role==="Teacher"?appData.teachers:appData.students).find(x=>x.id===u.id);return r?{...r,role:u.role}:u};
 const sortKeys=ks=>ks.sort((a,b)=>{const[g1,s1]=a.split("|"),[g2,s2]=b.split("|");return gNum(g1)-gNum(g2)||s1.localeCompare(s2)});
 const allClassKeys=()=>{const set=new Set();appData.students.forEach(s=>set.add(keyOf(s.grade,s.section||"A")));appData.assignments.forEach(a=>set.add(keyOf(a.grade,a.section)));return sortKeys([...set])};
-const asgSort=(a,b)=>DAYS.indexOf(a.day)-DAYS.indexOf(b.day)||toMin(a.start)-toMin(b.start);
+const asgSort=(a,b)=>gNum(a.grade)-gNum(b.grade)||String(a.section).localeCompare(String(b.section))||String(a.start||"99:99").localeCompare(String(b.start||"99:99"))||String(a.subject).localeCompare(String(b.subject));
 const teacherAsg=id=>appData.assignments.filter(a=>a.teacherId===id).sort(asgSort);
+// Grades a teacher is connected to: from saved assignments + legacy class-teacher value (kept, not deleted)
 const teacherGrades=t=>{const s=new Set(teacherAsg(t.id).map(a=>a.grade));if(t.classTeacherOf)s.add(t.classTeacherOf);return s};
 const teacherStudents=t=>{const ks=new Set(teacherAsg(t.id).map(a=>keyOf(a.grade,a.section)));return appData.students.filter(s=>ks.has(keyOf(s.grade,s.section||"A"))||(t.classTeacherOf&&s.grade===t.classTeacherOf))};
 const attPct=(store,id)=>{let p=0,t=0;for(const d in store){const s=store[d][id];if(s){t++;if(s==="Present")p++}}return t?Math.round(p/t*100):null};
@@ -357,7 +361,7 @@ function renderDashboard(){
     <button onclick="switchView('students')" class="px-4 py-2.5 bg-white text-royalBlue font-bold rounded-xl text-xs hover:bg-blueSoft flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i>Add Student</button>
     <button onclick="switchView('teachers')" class="px-4 py-2.5 bg-white text-royalBlue font-bold rounded-xl text-xs hover:bg-blueSoft flex items-center gap-2"><i data-lucide="user-check" class="w-4 h-4"></i>Add Teacher</button>
     <button onclick="switchView('timetable')" class="px-4 py-2.5 bg-white text-royalBlue font-bold rounded-xl text-xs hover:bg-blueSoft flex items-center gap-2"><i data-lucide="calendar-clock" class="w-4 h-4"></i>Timetable</button></div></div>
-   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">${statCard("users","Total Students",appData.students.length)}${statCard("user-check","Total Teachers",appData.teachers.length)}${statCard("calendar-clock","Teaching Assignments",appData.assignments.length)}${statCard("award","Exam Records",appData.marks.length)}</div>
+   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">${statCard("users","Total Students",appData.students.length)}${statCard("user-check","Total Teachers",appData.teachers.length)}${statCard("calendar-clock","Subject Assignments",appData.assignments.length)}${statCard("award","Exam Records",appData.marks.length)}</div>
    <div class="${CARD} p-4 sm:p-6 space-y-4"><div class="flex items-center justify-between border-b border-blueBorder pb-4 gap-3"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="bell" class="w-5 h-5"></i>Notice Board</h2><button onclick="openAnnouncementModal()" class="${BTN}"><i data-lucide="plus" class="w-4 h-4"></i>New Notice</button></div><div class="space-y-3">${annCards(5)}</div></div>`;
  }else if(u.role==="Teacher"){
   const studs=teacherStudents(u),asg=teacherAsg(u.id);
@@ -368,7 +372,7 @@ function renderDashboard(){
   v.innerHTML=`<div class="bg-gradient-to-r from-royalBlue to-blueHover text-white p-5 sm:p-8 rounded-3xl shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
    <div class="flex flex-col sm:flex-row items-center text-center sm:text-left gap-4">${avatar(u)}
     <div><h2 class="text-xl sm:text-2xl font-bold font-poppins">Welcome, Teacher!</h2><p class="text-blue-100 font-semibold text-sm">${esc(u.name)}</p>
-    <div class="flex flex-wrap justify-center sm:justify-start gap-2 mt-3"><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">ID: ${esc(u.id)}</span><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">${asg.length} weekly periods</span></div></div></div>
+    <div class="flex flex-wrap justify-center sm:justify-start gap-2 mt-3"><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">ID: ${esc(u.id)}</span><span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">${asg.length} assigned subject${asg.length===1?"":"s"}</span></div></div></div>
    <div class="grid grid-cols-2 gap-3 w-full md:w-auto">
     <div class="bg-white/10 p-4 rounded-2xl border border-white/20 text-center"><span class="text-xs font-bold uppercase text-blue-100 block">My Students</span><span class="text-2xl font-extrabold font-poppins">${studs.length}</span></div>
     <div class="bg-white/10 p-4 rounded-2xl border border-white/20 text-center"><span class="text-xs font-bold uppercase text-blue-100 block">Attendance Rate</span><span class="text-2xl font-extrabold font-poppins">${rate}</span></div></div></div>
@@ -396,9 +400,10 @@ function renderStudentDashboard(u,v){
     ${rp!==null?`<p class="text-3xl font-extrabold font-poppins text-royalBlue mt-3">${rp}% <span class="text-base">(${gradeOf(rp)})</span></p><p class="text-xs text-slate-500 mt-1">Across ${my.length} exam record(s)</p>`:`<p class="text-sm text-slate-500 mt-3 font-semibold">No results published yet</p>`}</div></div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
    <div class="${CARD} p-5 space-y-3"><h3 class="font-bold font-poppins text-royalBlue flex items-center gap-2 border-b border-blueBorder pb-3"><i data-lucide="book-open" class="w-5 h-5"></i>My Subjects</h3>
-    ${subs.length?subs.map(s=>`<div class="p-3 bg-blueTint rounded-xl border border-blueBorder flex items-center justify-between gap-2 text-xs"><span class="font-bold text-royalBlue">${esc(s.subject)}</span><span class="text-slate-600 font-semibold text-right">${esc(s.teacher)}</span></div>`).join(""):empty("No subjects found for your class.")}</div>
+    ${subs.length?subs.map(s=>`<div class="p-3 bg-blueTint rounded-xl border border-blueBorder flex items-center justify-between gap-2 text-xs"><span class="font-bold text-royalBlue">${esc(s.subject)}</span><span class="text-slate-600 font-semibold text-right">${esc(s.teacher)}${s.time?` · ${s.time}`:""}</span></div>`).join(""):empty("No subjects found for your class.")}</div>
    <div class="${CARD} p-5 space-y-3"><h3 class="font-bold font-poppins text-royalBlue flex items-center gap-2 border-b border-blueBorder pb-3"><i data-lucide="bell" class="w-5 h-5"></i>Announcements</h3>${annCards(3,true)}</div></div>`;
 }
+// subjects for a student's class + teacher from saved assignments
 function subjectRows(s){
  const sec=s.section||"A",names=new Set(appData.subjectsCatalog[s.grade]||[]);
  appData.assignments.filter(a=>a.grade===s.grade&&a.section===sec).forEach(a=>names.add(a.subject));
@@ -406,7 +411,7 @@ function subjectRows(s){
   const a=appData.assignments.find(x=>x.grade===s.grade&&x.section===sec&&x.subject===sub);
   let teacher=a?tName(a.teacherId):null;
   if(!teacher){const t=appData.teachers.find(t=>(t.assignedSubjects||[]).some(x=>x===sub||x===`${sub} (${s.grade})`));teacher=t?t.name:"To be assigned"}
-  return {subject:sub,teacher};
+  return {subject:sub,teacher,time:fmtT(a)};
  });
 }
 
@@ -417,7 +422,7 @@ function renderTeacherProfile(){
  $("view-my-profile").innerHTML=`<div class="${CARD} p-5 sm:p-8 space-y-6 max-w-2xl mx-auto"><div class="flex flex-col items-center text-center pb-6 border-b border-blueBorder gap-3">
   <div class="w-24 h-24 bg-royalBlue text-white rounded-3xl flex items-center justify-center font-extrabold text-4xl shadow-md">${esc(u.name.charAt(0))}</div>
   <div><h2 class="text-xl sm:text-2xl font-bold font-poppins text-royalBlue">${esc(u.name)}</h2><p class="text-xs font-bold text-slate-400 mt-1 uppercase">Teacher ID: ${esc(u.id)}</p></div></div>
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">${profileRow("Father Name",u.fatherName)}${profileRow("CNIC Number",u.cnic)}${profileRow("Teaching Subjects",subs.join(", ")||"None assigned yet")}${profileRow("Weekly Periods",teacherAsg(u.id).length)}</div></div>`;
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">${profileRow("Father Name",u.fatherName)}${profileRow("CNIC Number",u.cnic)}${profileRow("Teaching Subjects",subs.join(", ")||"None assigned yet")}${profileRow("Assigned Subjects",teacherAsg(u.id).length)}</div></div>`;
 }
 function renderStudentProfile(){
  const u=me();
@@ -430,7 +435,7 @@ function renderStudentSubjects(){
  const u=me(),rows=subjectRows(u);
  $("view-my-subjects").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4"><div class="border-b border-blueBorder pb-4"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="book-open" class="w-6 h-6"></i>My Enrolled Subjects & Assigned Teachers</h2><p class="text-xs text-slate-500 mt-1">${classLabel(u.grade,u.section||"A")}</p></div>
  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">${rows.map(r=>`<div class="p-5 bg-blueTint rounded-2xl border border-blueBorder space-y-3 lift"><span class="text-[10px] font-extrabold uppercase text-royalBlue bg-white px-2.5 py-1 rounded-full border border-blueBorder inline-block">Subject</span><h4 class="font-bold font-poppins text-royalBlue text-base">${esc(r.subject)}</h4>
- <div class="p-3 bg-white rounded-xl border border-blueBorder flex items-center gap-3"><div class="w-9 h-9 bg-blueTint text-royalBlue rounded-lg flex items-center justify-center flex-shrink-0"><i data-lucide="user-check" class="w-4 h-4"></i></div><div class="min-w-0"><span class="text-[10px] text-slate-400 font-bold uppercase block">Assigned Teacher</span><span class="text-xs font-bold text-slate-800 block break-words">${esc(r.teacher)}</span></div></div></div>`).join("")}</div></div>`;
+ <div class="p-3 bg-white rounded-xl border border-blueBorder flex items-center gap-3"><div class="w-9 h-9 bg-blueTint text-royalBlue rounded-lg flex items-center justify-center flex-shrink-0"><i data-lucide="user-check" class="w-4 h-4"></i></div><div class="min-w-0"><span class="text-[10px] text-slate-400 font-bold uppercase block">Assigned Teacher</span><span class="text-xs font-bold text-slate-800 block break-words">${esc(r.teacher)}</span>${r.time?`<span class="text-[11px] text-royalBlue font-semibold block">${r.time}</span>`:""}</div></div></div>`).join("")}</div></div>`;
 }
 
 /* ================= TEACHER: MY CLASSES & SUBJECTS ================= */
@@ -438,19 +443,21 @@ function renderMyClasses(){
  const u=me(),asg=teacherAsg(u.id);
  const keys=sortKeys([...new Set(asg.map(a=>keyOf(a.grade,a.section)))]);
  $("view-my-classes").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4">
-  <div class="border-b border-blueBorder pb-4"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="calendar-clock" class="w-6 h-6"></i>Teaching Assignments & Timetable</h2>
-  <p class="text-xs text-slate-500 mt-1">Your classes, subjects, days and times. Set by the administrator.</p></div>
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-   <select id="tc-day" onchange="renderTCTable()" class="${INP}"><option value="">All days</option>${DAYS.map(d=>`<option>${d}</option>`).join("")}</select>
-   <select id="tc-class" onchange="renderTCTable()" class="${INP}"><option value="">All my classes</option>${keys.map(k=>`<option value="${k}">${labelOfKey(k)}</option>`).join("")}</select></div>
-  <div id="tc-table"></div></div>`;
+  <div class="border-b border-blueBorder pb-4"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="book-open" class="w-6 h-6"></i>My Assigned Classes & Subjects</h2>
+  <p class="text-xs text-slate-500 mt-1">Only the subjects and classes assigned to you by the administrator are shown here.</p></div>
+  <select id="tc-class" onchange="renderTCTable()" class="${INP} sm:w-72"><option value="">All my classes</option>${keys.map(k=>`<option value="${k}">${labelOfKey(k)}</option>`).join("")}</select></div>
+  <div id="tc-table" class="space-y-6"></div>`;
  renderTCTable();
 }
 function renderTCTable(){
- const u=me(),d=$("tc-day").value,c=$("tc-class").value;
- let list=teacherAsg(u.id).filter(a=>(!d||a.day===d)&&(!c||keyOf(a.grade,a.section)===c));
- $("tc-table").innerHTML=list.length?tableWrap(["Day","Time","Class / Section","Subject"],list.map(a=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${a.day}</td><td class="p-3 sm:p-4 font-semibold whitespace-nowrap">${fmtT(a)}</td><td class="p-3 sm:p-4">${pill(classLabel(a.grade,a.section))}</td><td class="p-3 sm:p-4 font-semibold">${esc(a.subject)}</td></tr>`).join(""),520)
-  :`<div class="${CARD}">${empty("No teaching assignments found. Assignments appear here after the administrator creates them.","calendar-x")}</div>`;
+ const u=me(),c=$("tc-class").value;
+ const asg=teacherAsg(u.id).filter(a=>!c||keyOf(a.grade,a.section)===c);
+ const keys=sortKeys([...new Set(asg.map(a=>keyOf(a.grade,a.section)))]);
+ $("tc-table").innerHTML=keys.length?keys.map(k=>{
+  const[g,sec]=k.split("|"),list=asg.filter(a=>keyOf(a.grade,a.section)===k),n=appData.students.filter(s=>s.grade===g&&(s.section||"A")===sec).length;
+  return `<div class="${CARD} p-4 sm:p-6 space-y-3"><div class="flex items-center justify-between border-b border-blueBorder pb-3 gap-3"><h3 class="text-base font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="graduation-cap" class="w-5 h-5"></i>${labelOfKey(k)}</h3>${pill(list.length+" subject"+(list.length===1?"":"s"))}</div>
+  ${tableWrap(["Time","Subject","Class / Section","Students in Class"],list.map(a=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-semibold whitespace-nowrap">${fmtT(a)||"-"}</td><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(a.subject)}</td><td class="p-3 sm:p-4">${pill(classLabel(a.grade,a.section))}</td><td class="p-3 sm:p-4 font-semibold">${n}</td></tr>`).join(""),420)}</div>`}).join("")
+  :`<div class="${CARD}">${empty("No subjects assigned to you yet. They appear here as soon as the administrator assigns them.","book-x")}</div>`;
  icons();
 }
 
@@ -491,7 +498,7 @@ function saveStudent(e,oldId,isEdit){
 }
 async function deleteStudent(id){if(!confirm("Delete this student record?"))return;await dropAccountFor(id,"Student");appData.students=appData.students.filter(s=>s.id!==id);saveData();renderStudentRows();showToast("Student deleted","error")}
 
-/* ================= TEACHERS ================= */
+/* ================= TEACHERS (profile only, no class assignment) ================= */
 function renderTeachers(){
  $("view-teachers").innerHTML=`<div class="${CARD} p-4 sm:p-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
   <div class="w-full md:w-96 relative"><i data-lucide="search" class="w-5 h-5 text-royalBlue absolute left-4 top-3"></i><input id="teacher-search" oninput="renderTeacherRows()" placeholder="Search teachers by name or ID..." class="${INP} pl-12"></div>
@@ -518,7 +525,7 @@ function saveTeacher(e,oldId,isEdit){
  e.preventDefault();
  const rec={name:$("m-tch-name").value.trim(),fatherName:$("m-tch-fname").value.trim(),cnic:$("m-tch-cnic").value.trim()};
  const id=$("m-tch-id").value.trim();
- if(isEdit){const i=appData.teachers.findIndex(t=>t.id===oldId);if(i>-1)appData.teachers[i]={...appData.teachers[i],...rec}}
+ if(isEdit){const i=appData.teachers.findIndex(t=>t.id===oldId);if(i>-1)appData.teachers[i]={...appData.teachers[i],...rec}} // old class data preserved
  else{if(appData.teachers.some(t=>t.id===id))return showToast("Teacher ID already exists.","error");appData.teachers.push({id,...rec,assignedSubjects:[],classTeacherOf:""})}
  saveData();closeModal();renderTeacherRows();
  if(curView==="accounts") renderAccounts();
@@ -531,73 +538,114 @@ async function deleteTeacher(id){
  saveData();renderTeacherRows();showToast("Teacher deleted","error");
 }
 
-/* ================= TIMETABLE & SUBJECT ASSIGNMENT ================= */
+/* ================= SUBJECT ASSIGNMENT (ADMIN) ================= */
 let ttEditId=null;
+const OTHER_SUB="__other__";
+function subjectOptions(g,sel){
+ const set=new Set(appData.subjectsCatalog[g]||[]);
+ appData.assignments.filter(a=>a.grade===g).forEach(a=>set.add(a.subject));
+ if(sel)set.add(sel);
+ return [...set];
+}
 function renderTimetable(){
  ttEditId=null;
- const keys=allClassKeys();
  $("view-timetable").innerHTML=`<div class="${CARD} p-4 sm:p-6 space-y-4">
-  <div class="border-b border-blueBorder pb-3"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="calendar-clock" class="w-6 h-6"></i><span id="tt-form-title">Assign Teacher, Subject & Period</span></h2>
-  <p class="text-xs text-slate-500 mt-1">Saved assignments feed the class timetable, teacher schedules and student subject lists.</p></div>
-  <form id="tt-form" onsubmit="saveAssignment(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-   <div><label class="${LBL}">Grade</label><select id="tt-grade" onchange="fillSubjects()" class="${INP}">${appData.gradeList.map(g=>`<option>${g}</option>`).join("")}</select></div>
+  <div class="border-b border-blueBorder pb-3"><h2 class="text-lg font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="calendar-clock" class="w-6 h-6"></i><span id="tt-form-title">Assign Subject to Class & Teacher</span></h2>
+  <p class="text-xs text-slate-500 mt-1">Each Grade + Section gets its own subject table with start and end times. A subject can be assigned only once per class, but the same subject can be used in other classes or sections. Use Edit on any row to change the teacher, subject or time.</p></div>
+  <form id="tt-form" onsubmit="saveAssignment(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   <div><label class="${LBL}">Grade / Class</label><select id="tt-grade" onchange="fillSubjects()" class="${INP}">${appData.gradeList.map(g=>`<option>${g}</option>`).join("")}</select></div>
    <div><label class="${LBL}">Section</label><select id="tt-sec" class="${INP}">${SECTIONS.map(s=>`<option>${s}</option>`).join("")}</select></div>
-   <div><label class="${LBL}">Subject</label><select id="tt-sub" class="${INP}"></select></div>
+   <div><label class="${LBL}">Subject</label><select id="tt-sub" onchange="toggleOtherSub()" class="${INP}"></select></div>
    <div><label class="${LBL}">Teacher</label><select id="tt-tch" class="${INP}"><option value="">Select teacher</option>${appData.teachers.map(t=>`<option value="${t.id}">${esc(t.name)} (${t.id})</option>`).join("")}</select></div>
-   <div><label class="${LBL}">Day</label><select id="tt-day" class="${INP}"><option value="ALL">All Days (Mon–Sat)</option>${DAYS.map(d=>`<option>${d}</option>`).join("")}</select></div>
-   <div><label class="${LBL}">Start Time</label><input type="time" id="tt-start" class="${INP}"></div>
-   <div><label class="${LBL}">End Time</label><input type="time" id="tt-end" class="${INP}"></div>
-   <div class="flex items-end gap-2"><button class="${BTN} flex-1" id="tt-save-btn"><i data-lucide="save" class="w-4 h-4"></i>Save Assignment</button><button type="button" id="tt-cancel" onclick="resetTTForm()" class="hidden px-4 py-2.5 bg-blueTint text-royalBlue border border-blueBorder rounded-xl font-bold text-sm">Cancel</button></div>
+   <div><label class="${LBL}">Start Time</label><input type="time" id="tt-start" required class="${INP}"></div>
+   <div><label class="${LBL}">End Time</label><input type="time" id="tt-end" required class="${INP}"></div>
+   <div id="tt-other-wrap" class="hidden sm:col-span-2 lg:col-span-3"><label class="${LBL}">New Subject Name</label><input id="tt-sub-other" maxlength="60" placeholder="e.g. Art, Drawing, Quran..." class="${INP}"></div>
+   <div class="sm:col-span-2 lg:col-span-3 flex flex-col sm:flex-row gap-2"><button class="${BTN}" id="tt-save-btn"><i data-lucide="save" class="w-4 h-4"></i><span id="tt-save-label">Save Assignment</span></button><button type="button" id="tt-cancel" onclick="resetTTForm()" class="hidden px-4 py-2.5 bg-blueTint text-royalBlue border border-blueBorder rounded-xl font-bold text-sm">Cancel Edit</button></div>
   </form><div id="tt-msg" class="hidden p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-bold"></div></div>
-  <div class="${CARD} p-4 sm:p-6 space-y-4"><div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><h3 class="font-bold font-poppins text-royalBlue">Class Timetable</h3>
-   <div class="flex flex-col sm:flex-row gap-2"><select id="tt-filter" onchange="renderTTTable()" class="${INP} sm:w-56">${keys.map(k=>`<option value="${k}">${labelOfKey(k)}</option>`).join("")}</select><select id="tt-dayf" onchange="renderTTTable()" class="${INP} sm:w-44"><option value="">All Days</option>${DAYS.map(d=>`<option>${d}</option>`).join("")}</select></div></div><div id="tt-table"></div></div>`;
- fillSubjects();renderTTTable();
+  <div class="${CARD} p-4 sm:p-6"><div class="flex flex-col md:flex-row md:items-center justify-between gap-3"><div><h3 class="font-bold font-poppins text-royalBlue">Class-wise Subject Tables</h3><p class="text-xs text-slate-500 mt-0.5">Pick a grade to see all its sections (even empty ones), or leave it on All.</p></div>
+   <div class="flex flex-col sm:flex-row gap-2"><select id="tt-fgrade" onchange="renderTTTables()" class="${INP} sm:w-48"><option value="">All grades</option>${appData.gradeList.map(g=>`<option>${g}</option>`).join("")}</select><select id="tt-fsec" onchange="renderTTTables()" class="${INP} sm:w-44"><option value="">All sections</option>${SECTIONS.map(x=>`<option value="${x}">Section ${x}</option>`).join("")}</select></div></div></div>
+  <div id="tt-tables" class="space-y-6"></div>`;
+ fillSubjects();renderTTTables();
 }
 function fillSubjects(sel){
  const g=$("tt-grade").value;
- $("tt-sub").innerHTML=(appData.subjectsCatalog[g]||[]).map(s=>`<option ${s===sel?"selected":""}>${esc(s)}</option>`).join("");
+ $("tt-sub").innerHTML=subjectOptions(g,sel).map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("")+`<option value="${OTHER_SUB}">＋ Add another subject…</option>`;
+ if(sel)$("tt-sub").value=sel;
+ toggleOtherSub();
+}
+function toggleOtherSub(){
+ const o=$("tt-sub").value===OTHER_SUB;
+ $("tt-other-wrap").classList.toggle("hidden",!o);
+ if(!o)$("tt-sub-other").value="";
 }
 function ttError(m){const b=$("tt-msg");b.textContent=m;b.classList.remove("hidden");showToast(m,"error")}
-function ttConflict(a,ex){
- const others=appData.assignments.filter(x=>x.id!==ex&&x.day===a.day&&toMin(a.start)<toMin(x.end)&&toMin(x.start)<toMin(a.end));
- const cc=others.find(x=>x.grade===a.grade&&x.section===a.section);
- if(cc)return `${a.day}: ${classLabel(a.grade,a.section)} already has ${cc.subject} at ${fmtT(cc)}.`;
- const tc=others.find(x=>x.teacherId===a.teacherId);
- if(tc)return `${a.day}: ${tName(a.teacherId)} is already teaching ${classLabel(tc.grade,tc.section)} at ${fmtT(tc)}.`;
- return null;
-}
 function saveAssignment(e){
  e.preventDefault();$("tt-msg").classList.add("hidden");
- const a={grade:$("tt-grade").value,section:$("tt-sec").value,subject:$("tt-sub").value,teacherId:$("tt-tch").value,day:$("tt-day").value,start:$("tt-start").value,end:$("tt-end").value};
- if(!a.grade||!a.section||!a.subject||!a.teacherId||!a.day||!a.start||!a.end)return ttError("Please complete all required fields.");
- if(!appData.teachers.some(t=>t.id===a.teacherId))return ttError("Selected teacher does not exist.");
- if(!(appData.subjectsCatalog[a.grade]||[]).includes(a.subject))return ttError("Selected subject is not available for this grade.");
- if(toMin(a.end)<=toMin(a.start))return ttError("End time must be later than start time.");
- const all=a.day==="ALL";
- if(all&&ttEditId)return ttError("To edit, choose one single day. 'All Days' is only for creating new assignments.");
- const days=all?DAYS:[a.day];
- for(const d of days){const err=ttConflict({...a,day:d},ttEditId);if(err)return ttError(err+(all?" Nothing was saved.":""))}
- if(ttEditId){const i=appData.assignments.findIndex(x=>x.id===ttEditId);appData.assignments[i]={...appData.assignments[i],...a}}
- else days.forEach((d,n)=>appData.assignments.push({id:"ASG-"+Date.now()+"-"+n,...a,day:d}));
+ const grade=$("tt-grade").value,section=$("tt-sec").value,teacherId=$("tt-tch").value,start=$("tt-start").value,end=$("tt-end").value;
+ let subject=$("tt-sub").value===OTHER_SUB?$("tt-sub-other").value.trim().replace(/\s+/g," "):$("tt-sub").value;
+ if(!grade||!section||!subject||!teacherId)return ttError("Please select Grade, Section, Subject and Teacher.");
+ if(!start||!end)return ttError("Please enter the Start Time and End Time.");
+ if(toMin(end)<=toMin(start))return ttError("End time must be later than start time.");
+ if(!appData.gradeList.includes(grade)||!SECTIONS.includes(section))return ttError("Invalid grade or section.");
+ if(!appData.teachers.some(t=>t.id===teacherId))return ttError("Selected teacher does not exist.");
+ const canon=subjectOptions(grade).find(x=>normSub(x)===normSub(subject));if(canon)subject=canon;
+ const dup=appData.assignments.find(x=>x.id!==ttEditId&&x.grade===grade&&x.section===section&&normSub(x.subject)===normSub(subject));
+ if(dup)return ttError(`${subject} is already assigned to ${classLabel(grade,section)} (Teacher: ${tName(dup.teacherId)}). Edit that row, or choose a different subject.`);
+ const clash=appData.assignments.filter(x=>x.id!==ttEditId&&x.start&&x.end&&toMin(start)<toMin(x.end)&&toMin(x.start)<toMin(end));
+ const cc=clash.find(x=>x.grade===grade&&x.section===section);
+ if(cc)return ttError(`Time clash: ${classLabel(grade,section)} already has ${cc.subject} at ${fmtT(cc)}.`);
+ const tc=clash.find(x=>x.teacherId===teacherId);
+ if(tc)return ttError(`Time clash: ${tName(teacherId)} is already teaching ${classLabel(tc.grade,tc.section)} (${tc.subject}) at ${fmtT(tc)}.`);
+ const wasEdit=!!ttEditId;
+ if(wasEdit){const i=appData.assignments.findIndex(x=>x.id===ttEditId);if(i<0)return ttError("This assignment no longer exists.");appData.assignments[i]={...appData.assignments[i],grade,section,subject,teacherId,start,end}}
+ else appData.assignments.push({id:"ASG-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),grade,section,subject,teacherId,start,end});
  saveData();
- const keys=allClassKeys();$("tt-filter").innerHTML=keys.map(k=>`<option value="${k}">${labelOfKey(k)}</option>`).join("");$("tt-filter").value=keyOf(a.grade,a.section);
- const wasEdit=!!ttEditId;resetTTForm();renderTTTable();showToast(wasEdit?"Assignment updated!":all?`Saved for all ${days.length} days!`:"Assignment saved!");
+ const fg=$("tt-fgrade"),fs=$("tt-fsec");
+ if(fg.value&&fg.value!==grade)fg.value=grade;
+ if(fs.value&&fs.value!==section)fs.value="";
+ resetTTForm();$("tt-grade").value=grade;fillSubjects();$("tt-sec").value=section;if(!wasEdit)$("tt-start").value=end;
+ renderTTTables();showToast(wasEdit?"Assignment updated!":`${subject} assigned to ${classLabel(grade,section)}`);
 }
-function resetTTForm(){ttEditId=null;$("tt-form").reset();fillSubjects();$("tt-form-title").innerText="Assign Teacher, Subject & Period";$("tt-cancel").classList.add("hidden");$("tt-msg").classList.add("hidden")}
+function resetTTForm(){
+ ttEditId=null;$("tt-form").reset();fillSubjects();
+ $("tt-form-title").innerText="Assign Subject to Class & Teacher";$("tt-save-label").innerText="Save Assignment";
+ $("tt-cancel").classList.add("hidden");$("tt-msg").classList.add("hidden");
+}
 function editAssignment(id){
  const a=appData.assignments.find(x=>x.id===id);if(!a)return;ttEditId=id;
- $("tt-grade").value=a.grade;$("tt-sec").value=a.section;fillSubjects(a.subject);$("tt-sub").value=a.subject;
- $("tt-tch").value=a.teacherId;$("tt-day").value=a.day;$("tt-start").value=a.start;$("tt-end").value=a.end;
- $("tt-form-title").innerText="Edit Assignment";$("tt-cancel").classList.remove("hidden");
+ $("tt-grade").value=a.grade;$("tt-sec").value=a.section;fillSubjects(a.subject);$("tt-tch").value=a.teacherId;$("tt-start").value=a.start||"";$("tt-end").value=a.end||"";
+ $("tt-form-title").innerText="Edit Assignment";$("tt-save-label").innerText="Update Assignment";$("tt-cancel").classList.remove("hidden");$("tt-msg").classList.add("hidden");
  $("main-area").scrollTo({top:0,behavior:"smooth"});
 }
-function deleteAssignment(id){if(!confirm("Remove this assignment from the timetable?"))return;appData.assignments=appData.assignments.filter(a=>a.id!==id);saveData();if(ttEditId===id)resetTTForm();renderTTTable();showToast("Assignment removed","error")}
-function renderTTTable(){
- const k=$("tt-filter").value,[g,s]=(k||"|").split("|");
- const list=appData.assignments.filter(a=>a.grade===g&&a.section===s&&(!$("tt-dayf").value||a.day===$("tt-dayf").value)).sort(asgSort);
- $("tt-table").innerHTML=list.length?tableWrap(["Day","Time","Class","Subject","Teacher","Actions"],list.map(a=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${a.day}</td><td class="p-3 sm:p-4 whitespace-nowrap font-semibold">${fmtT(a)}</td><td class="p-3 sm:p-4">${pill(classLabel(a.grade,a.section))}</td><td class="p-3 sm:p-4 font-semibold">${esc(a.subject)}</td><td class="p-3 sm:p-4">${esc(tName(a.teacherId))}</td><td class="p-3 sm:p-4 text-right whitespace-nowrap space-x-2">${iconBtn(`editAssignment('${a.id}')`,"edit")}${iconBtn(`deleteAssignment('${a.id}')`,"trash-2",true)}</td></tr>`).join(""),700)
-  :`<div class="${CARD}">${empty("No assignments for this class yet. Use the form above to create one.","calendar-x")}</div>`;
+function prefillClass(g,s){
+ if(ttEditId)resetTTForm();
+ $("tt-grade").value=g;fillSubjects();$("tt-sec").value=s;
+ $("main-area").scrollTo({top:0,behavior:"smooth"});
+}
+function deleteAssignment(id){
+ const a=appData.assignments.find(x=>x.id===id);if(!a)return;
+ if(!confirm(`Remove ${a.subject} from ${classLabel(a.grade,a.section)}?`))return;
+ appData.assignments=appData.assignments.filter(x=>x.id!==id);saveData();
+ if(ttEditId===id)resetTTForm();
+ renderTTTables();showToast("Assignment removed","error");
+}
+function renderTTTables(){
+ const fg=$("tt-fgrade").value,fs=$("tt-fsec").value;
+ const keys=fg?SECTIONS.filter(x=>!fs||x===fs).map(x=>keyOf(fg,x)):allClassKeys().filter(k=>!fs||k.split("|")[1]===fs);
+ $("tt-tables").innerHTML=keys.length?keys.map(k=>{
+  const[g,sec]=k.split("|"),list=appData.assignments.filter(a=>a.grade===g&&a.section===sec).sort(asgSort);
+  const n=appData.students.filter(s=>s.grade===g&&(s.section||"A")===sec).length;
+  const body=list.length?tableWrap(["#","Subject","Teacher","Time","Actions"],list.map((a,i)=>`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 text-slate-400 font-bold">${i+1}</td><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(a.subject)}</td><td class="p-3 sm:p-4 font-semibold">${esc(tName(a.teacherId))} <span class="text-xs text-slate-400">(${esc(a.teacherId)})</span></td><td class="p-3 sm:p-4 whitespace-nowrap text-xs font-bold text-royalBlue">${a.start&&a.end?fmtT(a):`<span class="text-amber-600">Not set - click Edit</span>`}</td><td class="p-3 sm:p-4 text-right whitespace-nowrap space-x-2">${iconBtn(`editAssignment('${a.id}')`,"edit")}${iconBtn(`deleteAssignment('${a.id}')`,"trash-2",true)}</td></tr>`).join(""),520)
+   :`<div class="p-6 text-center text-slate-500 text-sm font-semibold">No subjects assigned to this class yet.</div>`;
+  return `<div class="${CARD} p-4 sm:p-6 space-y-3" data-class="${k}"><div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blueBorder pb-3"><h3 class="text-base font-bold font-poppins text-royalBlue flex items-center gap-2"><i data-lucide="graduation-cap" class="w-5 h-5"></i>${esc(g)}-${esc(sec)} Subjects</h3>
+   <div class="flex items-center gap-2 flex-wrap">${pill(list.length+" subject"+(list.length===1?"":"s"))}${pill(n+" student"+(n===1?"":"s"))}<button type="button" onclick="prefillClass('${g}','${sec}')" class="px-3 py-1.5 bg-blueTint hover:bg-royalBlue hover:text-white text-royalBlue border border-blueBorder rounded-xl font-bold text-xs">+ Add subject</button></div></div>${body}</div>`}).join("")
+  :`<div class="${CARD}">${empty("No classes yet. Add a subject above to create the first class table.","calendar-x")}</div>`;
  icons();
+}
+function normalizeAssignments(){
+ const seen=new Set(),out=[];
+ appData.assignments.forEach(a=>{const k=keyOf(a.grade,a.section)+"|"+normSub(a.subject);if(seen.has(k))return;seen.add(k);out.push(a)});
+ if(out.length!==appData.assignments.length){appData.assignments=out;saveData();showToast("Old day-wise entries were merged: one row per subject per class. Please review teachers.")}
 }
 
 /* ================= ATTENDANCE ================= */
@@ -632,6 +680,8 @@ function attList(){
  if(attMode==="teacher")return {list:appData.teachers,store:appData.teacherAttendance};
  return {list:u.role==="Teacher"?teacherStudents(u):appData.students,store:appData.attendance};
 }
+// Rules: no default status. Teacher marks students once, then it is locked for the teacher.
+// Admin marks teachers, can edit saved teacher + student records, but cannot mark students.
 function renderAttBody(){
  const role=me().role,isT=attMode==="teacher",{list,store}=attList();
  $("att-title").innerText=isT?"Teacher Attendance Register":"Student Attendance Register";
@@ -704,6 +754,7 @@ function markCells(m,withStudent){
  const st=appData.students.find(s=>s.id===m.studentId)||{name:"Unknown"};
  const p=m.total?Math.round(m.obtained/m.total*100):0;
  const g=`<span class="px-3 py-1 rounded-full text-xs font-bold text-white ${p>=50?"bg-royalBlue":"bg-red-500"}">${gradeOf(p)}</span>`;
+ const isAdminT=me().role!=="Student";
  return withStudent?`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-bold text-royalBlue">${esc(m.studentId)}</td><td class="p-3 sm:p-4 font-semibold">${esc(st.name)}</td><td class="p-3 sm:p-4">${esc(m.subject)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(m.examTitle)}</td><td class="p-3 sm:p-4 text-right font-semibold">${m.obtained}</td><td class="p-3 sm:p-4 text-right">${m.total}</td><td class="p-3 sm:p-4 text-right font-bold text-royalBlue">${p}%</td><td class="p-3 sm:p-4">${g}</td><td class="p-3 sm:p-4 text-right">${iconBtn(`deleteMark(${m.id})`,"trash-2",true)}</td></tr>`
   :`<tr class="hover:bg-blueTint"><td class="p-3 sm:p-4 font-semibold">${esc(m.subject)}</td><td class="p-3 sm:p-4 text-slate-600">${esc(m.examTitle)}</td><td class="p-3 sm:p-4 font-semibold">${m.obtained}</td><td class="p-3 sm:p-4">${m.total}</td><td class="p-3 sm:p-4 font-bold text-royalBlue">${p}%</td><td class="p-3 sm:p-4">${g}</td></tr>`;
 }
@@ -735,8 +786,9 @@ function openMarkModal(){
 }
 function fillMarkSubjects(){
  const u=me(),s=appData.students.find(x=>x.id===$("m-mark-student").value);
- let subs=appData.subjectsCatalog[s.grade]||[];
- if(u.role==="Teacher"){const mine=new Set(teacherAsg(u.id).filter(a=>a.grade===s.grade).map(a=>a.subject));(u.assignedSubjects||[]).forEach(x=>mine.add(x));const f=subs.filter(x=>mine.has(x));if(f.length)subs=f}
+ const sec=s.section||"A";
+ let subs=[...new Set([...(appData.subjectsCatalog[s.grade]||[]),...appData.assignments.filter(a=>a.grade===s.grade&&a.section===sec).map(a=>a.subject)])];
+ if(u.role==="Teacher"){const mine=new Set(teacherAsg(u.id).filter(a=>a.grade===s.grade&&a.section===sec).map(a=>a.subject));(u.assignedSubjects||[]).forEach(x=>mine.add(x));const f=subs.filter(x=>mine.has(x));if(f.length)subs=f}
  $("m-mark-subject").innerHTML=subs.map(x=>`<option>${esc(x)}</option>`).join("");
 }
 function saveMark(e){
@@ -993,6 +1045,7 @@ async function api(body){
  if(!r.ok){const e=new Error(j.error||`Server error ${r.status}: ${txt.slice(0,150)}`);e.status=r.status;throw e}
  return j;
 }
+// Uses the Vercel function; if the site has no /api (404) it uses the database function instead.
 async function manageUser(body){
  try{return await api(body)}
  catch(err){
@@ -1045,6 +1098,24 @@ function exportCSV(){
 function openModal(html){const b=$("modal-backdrop"),x=$("modal-box");x.innerHTML=html;b.classList.remove("hidden");setTimeout(()=>x.classList.remove("scale-95","opacity-0"),30);icons()}
 function closeModal(){const b=$("modal-backdrop"),x=$("modal-box");x.classList.add("scale-95","opacity-0");setTimeout(()=>b.classList.add("hidden"),200)}
 $("modal-backdrop").addEventListener("click",e=>{if(e.target.id==="modal-backdrop")closeModal()});
+
+let refreshing=false;
+async function refreshAssignedData(){
+ const u=appData.currentUser;
+ if(!u||u.role==="Admin"||!sb||refreshing||document.hidden||!$("modal-backdrop").classList.contains("hidden"))return;
+ refreshing=true;
+ try{
+  const[as,st]=await Promise.all([getAll("assignments"),getAll("students")]);
+  const na=as.map(M.assignments.from),ns=st.map(M.students.from);
+  if(JSON.stringify(na)!==JSON.stringify(appData.assignments)||JSON.stringify(ns)!==JSON.stringify(appData.students)){
+   appData.assignments=na;appData.students=ns;
+   if(["dashboard","my-classes","my-subjects","my-profile","my-profile-student"].includes(curView)){RENDERERS[curView]();icons()}
+  }
+ }catch(e){console.error(e)}
+ refreshing=false;
+}
+document.addEventListener("visibilitychange",refreshAssignedData);
+setInterval(refreshAssignedData,30000);
 
 window.addEventListener("DOMContentLoaded",async()=>{
  icons();
